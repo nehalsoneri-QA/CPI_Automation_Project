@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<extentreports>
+    <configuration>
+        <!-- Report Theme: standard, dark -->
+        <theme>dark</theme>
+
+        <!-- Document Encoding -->
+        <encoding>UTF-8</encoding>
+
+        <!-- Protocol for static resources (http, https) -->
+        <protocol>https</protocol>
+
+        <!-- Title of the document -->
+        <documentTitle>AI Automation Framework - Test Report</documentTitle>
+
+        <!-- Report title -->
+        <reportName>Test Execution Report</reportName>
+
+        <!-- Report headline -->
+        <reportHeadline>AI-Powered Automation Test Results</reportHeadline>
+
+        <!-- Timestamp format -->
+        <timeStampFormat>MMM dd, yyyy HH:mm:ss</timeStampFormat>
+
+        <!-- Custom CSS (optional) -->
+        <css>
+            .brand-logo {
+                background-image: url('https://cdn-icons-png.flaticon.com/512/2103/2103832.png');
+                background-size: contain;
+            }
+            .nav-wrapper {
+                background-color: #1a1a2e !important;
+            }
+        </css>
+
+        <!-- Custom JavaScript (optional) -->
+        <scripts>
+            <![CDATA[
+                $(document).ready(function() {
+                    console.log('Extent Report Loaded');
+                });
+            ]]>
+        </scripts>
+    </configuration>
+</extentreports>

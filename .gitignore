@@ -1,0 +1,52 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+logs/
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output
+test-output/
+allure-results/
+extent-reports/
+
+# Screenshots
+screenshots/
+
+# Logs
+*.log
+
+# Credentials and secrets
+*.env
+secrets.properties
+credentials.json
+
+# Temporary files
+*.tmp
+*.bak

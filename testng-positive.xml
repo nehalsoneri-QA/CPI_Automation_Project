@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="CPI AI Positive Test Flow Suite" verbose="1">
+
+  <!-- Suite Level Listeners -->
+  <listeners>
+    <listener class-name="com.automation.listeners.TestListener"/>
+  </listeners>
+
+  <!-- Positive Test Flow Only -->
+  <test name="Positive Test Flow">
+    <groups>
+      <run>
+        <include name="PositiveTestFlow"/>
+      </run>
+    </groups>
+    <classes>
+      <class name="com.automation.tests.CreateQuoteTest"/>
+    </classes>
+  </test>
+
+</suite>

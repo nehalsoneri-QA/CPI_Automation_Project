@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="CPI AI Test Suite" verbose="1">
+
+  <!-- Suite Level Listeners -->
+  <listeners>
+    <listener class-name="com.automation.listeners.TestListener"/>
+  </listeners>
+
+  <!-- All Tests in Single Test Block for Shared Browser Session -->
+  <!-- Flow: Login Tests -> Handle Reset Password -> Home Page Tests -->
+  <test name="CPI AI Complete Flow Tests">
+    <classes>
+      <!-- LoginTest runs first - logs in user and skips reset password -->
+      <class name="com.automation.tests.LoginTest"/>
+      <!-- HomePageTest runs next - uses same browser session (user already logged in) -->
+      <class name="com.automation.tests.HomePageTest"/>
+    </classes>
+  </test>
+
+  <!-- Create Quote Tests - All Tests -->
+  <test name="Create Quote All Tests">
+    <classes>
+      <class name="com.automation.tests.CreateQuoteTest"/>
+    </classes>
+  </test>
+
+  <!-- Positive Test Flow Only - Run with: mvn test -DsuiteXmlFile=testng-positive.xml -->
+  <!-- Or use: mvn test -Dgroups=PositiveTestFlow -->
+
+</suite>
