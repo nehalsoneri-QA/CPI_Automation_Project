@@ -174,7 +174,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		// Approach 1: Try getAttribute("value")
 		try {
 			value = element.getAttribute("value");
-			if (value != null && !value.isEmpty()) {
+			if (isValidDateValue(value)) {
 				logger.info("Got date from value attribute: {}", value);
 				return value;
 			}
@@ -185,7 +185,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		// Approach 2: Try getText()
 		try {
 			value = element.getText();
-			if (value != null && !value.isEmpty()) {
+			if (isValidDateValue(value)) {
 				logger.info("Got date from getText(): {}", value);
 				return value;
 			}
@@ -197,7 +197,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		try {
 			value = (String) ((JavascriptExecutor) driver).executeScript(
 				"return document.getElementById('" + elementId + "').value;");
-			if (value != null && !value.isEmpty()) {
+			if (isValidDateValue(value)) {
 				logger.info("Got date from JavaScript: {}", value);
 				return value;
 			}
@@ -209,7 +209,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		try {
 			WebElement input = element.findElement(By.tagName("input"));
 			value = input.getAttribute("value");
-			if (value != null && !value.isEmpty()) {
+			if (isValidDateValue(value)) {
 				logger.info("Got date from inner input: {}", value);
 				return value;
 			}
@@ -217,14 +217,40 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			// Continue to next approach
 		}
 
-		// Approach 5: Try getting displayed text from parent/sibling elements
+		// Approach 5: Try getting displayed text from spans inside element
+		try {
+			List<WebElement> spans = element.findElements(By.tagName("span"));
+			for (WebElement span : spans) {
+				String text = span.getText();
+				if (isValidDateValue(text)) {
+					logger.info("Got date from inner span: {}", text);
+					return text;
+				}
+			}
+		} catch (Exception e) {
+			// Continue to next approach
+		}
+
+		// Approach 6: Try JavaScript to get all text content
 		try {
 			value = (String) ((JavascriptExecutor) driver).executeScript(
 				"var el = document.getElementById('" + elementId + "');" +
-				"if(el) { return el.value || el.innerText || el.textContent || ''; }" +
+				"if(el) {" +
+				"  if(el.value && el.value !== '--') return el.value;" +
+				"  var inputs = el.getElementsByTagName('input');" +
+				"  for(var i=0; i<inputs.length; i++) {" +
+				"    if(inputs[i].value && inputs[i].value !== '--') return inputs[i].value;" +
+				"  }" +
+				"  var spans = el.getElementsByTagName('span');" +
+				"  for(var i=0; i<spans.length; i++) {" +
+				"    var text = spans[i].innerText || spans[i].textContent;" +
+				"    if(text && text.trim() && text !== '--') return text.trim();" +
+				"  }" +
+				"  return el.innerText || el.textContent || '';" +
+				"}" +
 				"return '';");
-			if (value != null && !value.isEmpty()) {
-				logger.info("Got date from JavaScript innerText: {}", value);
+			if (isValidDateValue(value)) {
+				logger.info("Got date from JavaScript comprehensive: {}", value);
 				return value;
 			}
 		} catch (Exception e) {
@@ -235,12 +261,20 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	}
 
 	/**
-	 * Get endorsement effective date value
+	 * Check if date value is valid (not null, not empty, not placeholder)
+	 */
+	private boolean isValidDateValue(String value) {
+		return value != null && !value.isEmpty() && !value.equals("--") && !value.equals("null") && !value.equals("Select");
+	}
+
+	/**
+	 * Get endorsement effective date value (handles disabled fields)
 	 */
 	public String getEndorsementEffectiveDate() {
 		try {
-			return endorsementEffectiveDatePicker.getAttribute("value");
+			return getDateFromDisabledField(endorsementEffectiveDatePicker, "create-endorsement-endorsement-effective-date-picker");
 		} catch (Exception e) {
+			logger.warn("Error getting endorsement effective date: {}", e.getMessage());
 			return "";
 		}
 	}
@@ -305,14 +339,96 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	}
 
 	/**
-	 * Get selected suggested state
+	 * Get selected suggested state (handles disabled dropdowns)
 	 */
 	public String getSelectedState() {
 		try {
-			return suggestedStateDropdown.getText();
+			return getValueFromDisabledDropdown(suggestedStateDropdown, "create-endorsement-suggested-state-select");
 		} catch (Exception e) {
+			logger.warn("Error getting selected state: {}", e.getMessage());
 			return "";
 		}
+	}
+
+	/**
+	 * Helper method to get value from disabled dropdown
+	 * Tries multiple approaches: getText, value attribute, JavaScript
+	 */
+	private String getValueFromDisabledDropdown(WebElement element, String elementId) {
+		String value = "";
+
+		// Approach 1: Try getText()
+		try {
+			value = element.getText();
+			if (value != null && !value.isEmpty() && !value.equals("--") && !value.equals("Select")) {
+				logger.info("Got dropdown value from getText(): {}", value);
+				return value;
+			}
+		} catch (Exception e) {
+			// Continue to next approach
+		}
+
+		// Approach 2: Try getAttribute("value")
+		try {
+			value = element.getAttribute("value");
+			if (value != null && !value.isEmpty()) {
+				logger.info("Got dropdown value from value attribute: {}", value);
+				return value;
+			}
+		} catch (Exception e) {
+			// Continue to next approach
+		}
+
+		// Approach 3: Try JavaScript to get innerText
+		try {
+			value = (String) ((JavascriptExecutor) driver).executeScript(
+				"var el = document.getElementById('" + elementId + "');" +
+				"if(el) { return el.innerText || el.textContent || el.value || ''; }" +
+				"return '';");
+			if (value != null && !value.isEmpty() && !value.equals("--")) {
+				logger.info("Got dropdown value from JavaScript innerText: {}", value);
+				return value;
+			}
+		} catch (Exception e) {
+			// Continue to next approach
+		}
+
+		// Approach 4: Try finding selected option or span inside
+		try {
+			List<WebElement> spans = element.findElements(By.tagName("span"));
+			for (WebElement span : spans) {
+				String text = span.getText();
+				if (text != null && !text.isEmpty() && !text.equals("--") && !text.equals("Select")) {
+					logger.info("Got dropdown value from inner span: {}", text);
+					return text;
+				}
+			}
+		} catch (Exception e) {
+			// Continue to next approach
+		}
+
+		// Approach 5: Try xpath to find text content
+		try {
+			value = (String) ((JavascriptExecutor) driver).executeScript(
+				"var el = document.getElementById('" + elementId + "');" +
+				"if(el) {" +
+				"  var spans = el.getElementsByTagName('span');" +
+				"  for(var i=0; i<spans.length; i++) {" +
+				"    var text = spans[i].innerText || spans[i].textContent;" +
+				"    if(text && text.trim() && text !== '--' && text !== 'Select') return text.trim();" +
+				"  }" +
+				"  return el.innerText || el.textContent || '';" +
+				"}" +
+				"return '';");
+			if (value != null && !value.isEmpty() && !value.equals("--")) {
+				logger.info("Got dropdown value from JavaScript spans: {}", value);
+				return value;
+			}
+		} catch (Exception e) {
+			logger.warn("All approaches failed to get dropdown value");
+		}
+
+		return value != null ? value : "";
 	}
 
 	/**
