@@ -150,22 +150,37 @@ public class CreateQuoteLocators extends BasePage {
 	}
 
 	protected WebElement findDropdownByLabel(String labelText) {
+		logger.info("Finding dropdown by label: {}", labelText);
+
+		// Wait for page elements to be ready
+		sleep(3000);
 
 		// Strategy 1: Find by label followed by button/div
-		String[] xpaths = { "//label[contains(text(),'" + labelText + "')]/following-sibling::*//button",
+		String[] xpaths = {
+				"//label[contains(text(),'" + labelText + "')]/following-sibling::*//button",
 				"//label[contains(text(),'" + labelText + "')]/following::button[1]",
 				"//label[contains(text(),'" + labelText + "')]/..//button",
 				"//label[contains(text(),'" + labelText + "')]/parent::*//button",
 				"//*[contains(text(),'" + labelText + "')]/following::button[1]",
 				"//button[contains(@aria-label,'" + labelText + "')]",
 				"//*[contains(@id,'" + labelText.toLowerCase() + "')]//button",
-				"//*[contains(@class,'" + labelText.toLowerCase() + "')]//button" };
+				"//*[contains(@class,'" + labelText.toLowerCase() + "')]//button",
+				// Select patterns
+				"//label[contains(text(),'Select " + labelText + "')]/following::button[1]",
+				"//label[contains(text(),'Select " + labelText + "')]/..//button",
+				// Additional patterns for React components
+				"//div[contains(@class,'select')]//button[contains(@aria-haspopup,'listbox')]",
+				"//div[contains(@class,'combobox')]//button",
+				"//*[@role='combobox' and contains(@aria-label,'" + labelText + "')]"
+		};
 
+		// First attempt - quick check
 		for (String xpath : xpaths) {
 			try {
 				java.util.List<WebElement> elements = driver.findElements(By.xpath(xpath));
 				for (WebElement el : elements) {
 					if (el.isDisplayed()) {
+						logger.info("Found dropdown for '{}' with xpath: {}", labelText, xpath);
 						return el;
 					}
 				}
@@ -174,6 +189,45 @@ public class CreateQuoteLocators extends BasePage {
 			}
 		}
 
+		// Strategy 2: Try with explicit wait (longer timeout)
+		try {
+			org.openqa.selenium.support.ui.WebDriverWait wait =
+				new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+
+			for (String xpath : xpaths) {
+				try {
+					WebElement el = wait.until(org.openqa.selenium.support.ui.ExpectedConditions
+						.elementToBeClickable(By.xpath(xpath)));
+					if (el != null && el.isDisplayed()) {
+						logger.info("Found dropdown for '{}' after wait with xpath: {}", labelText, xpath);
+						return el;
+					}
+				} catch (Exception e) {
+					// Continue
+				}
+			}
+		} catch (Exception e) {
+			logger.debug("Wait strategy failed: {}", e.getMessage());
+		}
+
+		// Strategy 3: Retry with additional sleep (for slow-loading pages)
+		logger.info("Retrying dropdown search with additional wait for: {}", labelText);
+		sleep(3000);
+		for (String xpath : xpaths) {
+			try {
+				java.util.List<WebElement> elements = driver.findElements(By.xpath(xpath));
+				for (WebElement el : elements) {
+					if (el.isDisplayed()) {
+						logger.info("Found dropdown for '{}' on retry with xpath: {}", labelText, xpath);
+						return el;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		logger.warn("Could not find dropdown for label: {}", labelText);
 		return null;
 	}
 
@@ -359,21 +413,42 @@ public class CreateQuoteLocators extends BasePage {
 
 	protected void clickApplyButtonIfExists(String labelText) {
 		try {
-			String[] xpaths = { "//label[contains(text(),'" + labelText + "')]/..//button[contains(text(),'Apply')]",
-					"//label[contains(text(),'" + labelText + "')]/following::button[contains(text(),'Apply')][1]",
-					"//*[contains(text(),'" + labelText + "')]/following::button[contains(text(),'Apply')][1]" };
+			logger.info("Looking for Apply button near: {}", labelText);
+			String[] xpaths = {
+				"//label[contains(text(),'" + labelText + "')]/..//button[contains(text(),'Apply')]",
+				"//label[contains(text(),'" + labelText + "')]/following::button[contains(text(),'Apply')][1]",
+				"//*[contains(text(),'" + labelText + "')]/following::button[contains(text(),'Apply')][1]",
+				"//button[contains(text(),'Apply')][preceding::*[contains(text(),'" + labelText + "')]]",
+				"//input[contains(@id,'" + labelText.toLowerCase().replace(" ", "-") + "')]/following-sibling::button",
+				"//input[contains(@id,'" + labelText.toLowerCase().replace(" ", "-") + "')]/..//button[contains(text(),'Apply')]",
+				"//input[contains(@id,'" + labelText.toLowerCase().replace(" ", "-") + "')]/parent::*/following-sibling::button",
+				"//input[contains(@id,'general-liability')]/following-sibling::button",
+				"//input[contains(@id,'water-sewer')]/following-sibling::button",
+				"//button[contains(@class,'apply') or contains(text(),'Apply')]"
+			};
 
 			for (String xpath : xpaths) {
-				java.util.List<WebElement> buttons = driver.findElements(By.xpath(xpath));
-				for (WebElement btn : buttons) {
-					if (btn.isDisplayed() && btn.isEnabled()) {
-						click(btn);
-						sleep(500);
-						return;
+				try {
+					java.util.List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+					for (WebElement btn : buttons) {
+						if (btn.isDisplayed() && btn.isEnabled()) {
+							logger.info("Found Apply button using xpath: {}", xpath);
+							scrollIntoView(btn);
+							sleep(300);
+							click(btn);
+							logger.info("Clicked Apply button for: {}", labelText);
+							sleep(500);
+							captureScreenshotToReport("Apply Button Clicked - " + labelText);
+							return;
+						}
 					}
+				} catch (Exception ex) {
+					// Continue to next xpath
 				}
 			}
+			logger.warn("Apply button not found for: {} (may not be required)", labelText);
 		} catch (Exception e) {
+			logger.warn("Error clicking Apply button for {}: {}", labelText, e.getMessage());
 		}
 	}
 

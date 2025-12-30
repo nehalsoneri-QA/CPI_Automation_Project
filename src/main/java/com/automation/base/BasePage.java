@@ -1107,7 +1107,7 @@ public abstract class BasePage {
     /**
      * Log HTML content to ExtentReport (for tables, formatted content)
      */
-    protected void logHtmlToReport(String htmlContent) {
+    public void logHtmlToReport(String htmlContent) {
         try {
             com.aventstack.extentreports.ExtentTest extentTest =
                 com.automation.listeners.TestListener.getExtentTest();
@@ -2079,7 +2079,7 @@ public abstract class BasePage {
         private int locationNumber;
         private String address;
         private double dwelling, additionalStructures, bpp, lossOfRents, rate, tiv, propertyPremium, taxes;
-        private double wsPremium, glPremium, fullTerm;
+        private double wsPremium, glPremium, fullTerm, fees;
         public LocationRowData(int locationNumber) { this.locationNumber = locationNumber; }
         public LocationRowData setAddress(String value) { this.address = value; return this; }
         public LocationRowData setDwelling(double value) { this.dwelling = value; return this; }
@@ -2093,6 +2093,7 @@ public abstract class BasePage {
         public LocationRowData setWsPremium(double value) { this.wsPremium = value; return this; }
         public LocationRowData setGlPremium(double value) { this.glPremium = value; return this; }
         public LocationRowData setFullTerm(double value) { this.fullTerm = value; return this; }
+        public LocationRowData setFees(double value) { this.fees = value; return this; }
         public int getLocationNumber() { return locationNumber; }
         public String getAddress() { return address; }
         public double getDwelling() { return dwelling; }
@@ -2106,6 +2107,7 @@ public abstract class BasePage {
         public double getWsPremium() { return wsPremium; }
         public double getGlPremium() { return glPremium; }
         public double getFullTerm() { return fullTerm; }
+        public double getFees() { return fees; }
         public double calculateExpectedTIV() { return dwelling + additionalStructures + bpp + lossOfRents; }
         public double calculateExpectedPropertyPremium() { return (calculateExpectedTIV() / 100.0) * rate; }
         // Full Term = Property Premium + WS + GL + Tax

@@ -1,0 +1,26 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Create Premium Endorsement Test Suite" verbose="1">
+
+    <test name="Create Premium Endorsement Tests">
+        <classes>
+            <class name="com.automation.tests.CreatePremiumEndorsementTest">
+                <methods>
+                    <!-- Flow: Login -> Create Quote -> Submit -> Edit Quote -> Bind -> Master Policy -> Premium Endorsement -->
+                    <include name="testPositiveLogin"/>
+                    <include name="testEnterDataOnCreateQuote"/>
+                    <include name="testClickSubmitButton"/>
+                    <include name="testAddLocationsOnEditQuote"/>
+                    <include name="testClickBindButton"/>
+                    <include name="testClickPremiumEndorsementButton"/>
+                    <include name="testVerifyEndorsementPageURL"/>
+                    <include name="testVerifyEndorsementPageLoaded"/>
+                    <include name="testCaptureEndorsementFormValues"/>
+                    <include name="testVerifyLocationCount"/>
+                    <include name="testVerifySubmitButtonState"/>
+                    <include name="testFinalSummary"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+</suite>

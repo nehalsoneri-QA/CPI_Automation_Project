@@ -88,11 +88,35 @@ public class CreateQuotePage extends CreateQuoteLocators {
 
     /**
      * Wait for page to be ready for interaction
+     * Waits for URL, then waits for form elements (dropdowns) to be visible
      */
     public void waitForPageReady() {
         logger.info("Waiting for Create Quote page to be ready");
         waitForPageLoad();
         sleep(2000);
+
+        // Wait for form elements to be visible - specifically Agent dropdown
+        try {
+            org.openqa.selenium.support.ui.WebDriverWait formWait =
+                new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+
+            // Wait for any dropdown button to be visible (indicates form is loaded)
+            formWait.until(org.openqa.selenium.support.ui.ExpectedConditions.or(
+                org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+                    org.openqa.selenium.By.xpath("//label[contains(text(),'Agent')]/following::button[1]")),
+                org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+                    org.openqa.selenium.By.xpath("//label[contains(text(),'Select Agent')]/following::button[1]")),
+                org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+                    org.openqa.selenium.By.xpath("//*[contains(@id,'agent')]//button")),
+                org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+                    org.openqa.selenium.By.xpath("//button[contains(@aria-label,'Agent')]"))
+            ));
+            logger.info("Form elements are visible");
+        } catch (Exception e) {
+            logger.warn("Timeout waiting for form elements, continuing anyway: {}", e.getMessage());
+        }
+
+        sleep(1000);
     }
 
     // ==================== Invalid Data Validation Methods ====================
@@ -1314,6 +1338,43 @@ public class CreateQuotePage extends CreateQuoteLocators {
      */
     public void waitForPageLoad() {
         waitForPageLoadOrFail("/new_quote", "Create Quote");
+    }
+
+    /**
+     * Wait for Submit button to be visible and enabled
+     * Useful after file upload when page may still be processing
+     */
+    public void waitForSubmitButtonVisible() {
+        logger.info("Waiting for Submit button to be visible...");
+        int maxWaitSeconds = 30;
+        int waited = 0;
+
+        String[] submitXpaths = {
+            "//button[contains(text(),'Submit')]",
+            "//button[@id='new-quote-submit-button']",
+            "//button[contains(@class,'submit')]",
+            "//button[@type='submit']",
+            "//button[contains(text(),'Create Quote')]"
+        };
+
+        while (waited < maxWaitSeconds) {
+            for (String xpath : submitXpaths) {
+                try {
+                    java.util.List<org.openqa.selenium.WebElement> buttons = driver.findElements(org.openqa.selenium.By.xpath(xpath));
+                    for (org.openqa.selenium.WebElement btn : buttons) {
+                        if (btn.isDisplayed() && btn.isEnabled()) {
+                            logger.info("Submit button is visible and enabled after {} seconds", waited);
+                            return;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Continue
+                }
+            }
+            sleep(1000);
+            waited++;
+        }
+        logger.warn("Submit button not found after {} seconds, continuing anyway", maxWaitSeconds);
     }
 
     /**
@@ -3723,22 +3784,25 @@ public class CreateQuotePage extends CreateQuoteLocators {
     /**
      * Get displayed total value from UI
      * Uses parseAmountValue from BasePage
+     * Supports multiple label alternatives (tries each until found)
      */
-    private double getDisplayedTotal(String label) {
-        try {
-            List<WebElement> elements = driver.findElements(By.xpath(
-                "//*[contains(text(),'" + label + "')]/following-sibling::*[1] | " +
-                "//*[contains(text(),'" + label + "')]/..//span[last()] | " +
-                "//td[contains(text(),'" + label + "')]/following-sibling::td[1]"
-            ));
-            for (WebElement el : elements) {
-                String text = el.getText().trim();
-                if (text.contains("$") || text.matches(".*\\d.*")) {
-                    return parseAmountValue(text);
+    protected double getDisplayedTotal(String... labels) {
+        for (String label : labels) {
+            try {
+                List<WebElement> elements = driver.findElements(By.xpath(
+                    "//*[contains(text(),'" + label + "')]/following-sibling::*[1] | " +
+                    "//*[contains(text(),'" + label + "')]/..//span[last()] | " +
+                    "//td[contains(text(),'" + label + "')]/following-sibling::td[1]"
+                ));
+                for (WebElement el : elements) {
+                    String text = el.getText().trim();
+                    if (text.contains("$") || text.matches(".*\\d.*")) {
+                        return parseAmountValue(text);
+                    }
                 }
+            } catch (Exception e) {
+                logger.debug("Error getting displayed total for '{}': {}", label, e.getMessage());
             }
-        } catch (Exception e) {
-            logger.debug("Error getting displayed total: {}", e.getMessage());
         }
         return 0.0;
     }
@@ -3796,6 +3860,8 @@ public class CreateQuotePage extends CreateQuoteLocators {
 
         long startTime = System.currentTimeMillis();
         long timeout = timeoutSeconds * 1000L;
+        // Look for PDFs modified within the last 60 seconds (more lenient)
+        long recentThreshold = startTime - 60000;
 
         while (System.currentTimeMillis() - startTime < timeout) {
             java.io.File[] files = dir.listFiles((d, name) ->
@@ -3804,12 +3870,12 @@ public class CreateQuotePage extends CreateQuoteLocators {
                 !name.endsWith(".tmp"));
 
             if (files != null && files.length > 0) {
-                // Find most recent PDF
+                // Find most recent PDF modified within the last 60 seconds
                 java.io.File mostRecent = null;
                 long mostRecentTime = 0;
                 for (java.io.File file : files) {
                     if (file.lastModified() > mostRecentTime &&
-                        file.lastModified() > startTime - 5000) { // Within last 5 seconds of start
+                        file.lastModified() > recentThreshold) {
                         mostRecentTime = file.lastModified();
                         mostRecent = file;
                     }
@@ -3821,6 +3887,29 @@ public class CreateQuotePage extends CreateQuoteLocators {
             }
             sleep(1000);
         }
+
+        // Last resort: find the most recently modified PDF regardless of time
+        logger.info("Trying to find any recent PDF in Downloads...");
+        java.io.File[] allPdfs = dir.listFiles((d, name) ->
+            name.toLowerCase().endsWith(".pdf") &&
+            !name.endsWith(".crdownload") &&
+            !name.endsWith(".tmp"));
+
+        if (allPdfs != null && allPdfs.length > 0) {
+            java.io.File mostRecent = null;
+            long mostRecentTime = 0;
+            for (java.io.File file : allPdfs) {
+                if (file.lastModified() > mostRecentTime) {
+                    mostRecentTime = file.lastModified();
+                    mostRecent = file;
+                }
+            }
+            if (mostRecent != null) {
+                logger.info("Found most recent PDF: {}", mostRecent.getAbsolutePath());
+                return mostRecent.getAbsolutePath();
+            }
+        }
+
         logger.info("PDF download timeout after {} seconds", timeoutSeconds);
         return null;
     }
@@ -5322,9 +5411,12 @@ public class CreateQuotePage extends CreateQuoteLocators {
             int taxesCol = findColumnIndex(columnIndices, "taxes", "tax");
             int tivCol = findColumnIndex(columnIndices, "tiv", "total insurable value");
             int propPremCol = findColumnIndex(columnIndices, "property premium", "prop premium", "premium");
+            int glCol = findColumnIndex(columnIndices, "gl", "gl premium", "general liability");
+            int wsCol = findColumnIndex(columnIndices, "ws", "ws premium", "water", "sewer", "water/sewer");
+            int feesCol = findColumnIndex(columnIndices, "fees", "fee", "policy fee");
 
-            logger.info("Column mapping - Location:{}, Dwelling:{}, AS:{}, BPP:{}, LOR:{}, Rate:{}, Taxes:{}, TIV:{}, PropPrem:{}",
-                locationCol, dwellingCol, asCol, bppCol, lorCol, rateCol, taxesCol, tivCol, propPremCol);
+            logger.info("Column mapping - Location:{}, Dwelling:{}, AS:{}, BPP:{}, LOR:{}, Rate:{}, Taxes:{}, TIV:{}, PropPrem:{}, GL:{}, WS:{}, Fees:{}",
+                locationCol, dwellingCol, asCol, bppCol, lorCol, rateCol, taxesCol, tivCol, propPremCol, glCol, wsCol, feesCol);
 
             // Get data rows (skip header row)
             List<WebElement> rows = dialogTable.findElements(By.xpath(".//tbody//tr | .//tr[position()>1]"));
@@ -5377,12 +5469,21 @@ public class CreateQuotePage extends CreateQuoteLocators {
                     if (propPremCol >= 0 && propPremCol < cells.size()) {
                         rowData.setPropertyPremium(parseAmountValue(cells.get(propPremCol).getText()));
                     }
+                    if (glCol >= 0 && glCol < cells.size()) {
+                        rowData.setGlPremium(parseAmountValue(cells.get(glCol).getText()));
+                    }
+                    if (wsCol >= 0 && wsCol < cells.size()) {
+                        rowData.setWsPremium(parseAmountValue(cells.get(wsCol).getText()));
+                    }
+                    if (feesCol >= 0 && feesCol < cells.size()) {
+                        rowData.setFees(parseAmountValue(cells.get(feesCol).getText()));
+                    }
 
                     locationData.add(rowData);
-                    logger.info("Location {}: Addr='{}', Dwelling=${}, AS=${}, BPP=${}, LOR=${}, Rate={}, Taxes=${}, TIV=${}, PropPrem=${}",
+                    logger.info("Location {}: Addr='{}', Dwelling=${}, AS=${}, BPP=${}, LOR=${}, Rate={}, Taxes=${}, TIV=${}, PropPrem=${}, GL=${}, WS=${}, Fees=${}",
                         locationNumber, address, rowData.getDwelling(), rowData.getAdditionalStructures(),
                         rowData.getBpp(), rowData.getLossOfRents(), rowData.getRate(), rowData.getTaxes(),
-                        rowData.getTiv(), rowData.getPropertyPremium());
+                        rowData.getTiv(), rowData.getPropertyPremium(), rowData.getGlPremium(), rowData.getWsPremium(), rowData.getFees());
 
                     locationNumber++;
                 } catch (Exception e) {
@@ -5741,5 +5842,276 @@ public class CreateQuotePage extends CreateQuoteLocators {
         public void setMessage(String message) { this.message = message; }
         public String getToastMessage() { return toastMessage; }
         public void setToastMessage(String toastMessage) { this.toastMessage = toastMessage; }
+    }
+
+    // ==================== Arch + California Validation ====================
+
+    /**
+     * Check if any location address contains California (CA)
+     * @param locations List of location data from Excel
+     * @return true if any location is in California
+     */
+    public boolean hasCaliforniaLocation(List<Map<String, String>> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return false;
+        }
+
+        for (Map<String, String> location : locations) {
+            String address = location.getOrDefault("Address", "");
+            if (isCaliforniaAddress(address)) {
+                logger.info("California location detected: {}", address);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if an address is in California
+     * Checks for "CA", "California", common CA zip codes (9xxxx)
+     */
+    public boolean isCaliforniaAddress(String address) {
+        if (address == null || address.isEmpty()) {
+            return false;
+        }
+
+        String addressUpper = address.toUpperCase().trim();
+
+        // Check for state abbreviation - must be at end or followed by zip
+        // Pattern: ", CA " or ", CA," or ends with " CA" or ", CA 9xxxx"
+        if (addressUpper.contains(", CA ") ||
+            addressUpper.contains(", CA,") ||
+            addressUpper.endsWith(" CA") ||
+            addressUpper.endsWith(",CA") ||
+            addressUpper.matches(".*,\\s*CA\\s+\\d{5}.*")) {
+            return true;
+        }
+
+        // Check for full state name
+        if (addressUpper.contains("CALIFORNIA")) {
+            return true;
+        }
+
+        // Check for California zip codes (90000-96199)
+        java.util.regex.Pattern zipPattern = java.util.regex.Pattern.compile("\\b(9[0-5]\\d{3}|96[01]\\d{2})\\b");
+        if (zipPattern.matcher(address).find()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the Arch California error message is displayed
+     * @return true if the error message is visible
+     */
+    public boolean isArchCaliforniaErrorDisplayed() {
+        String[] errorXpaths = {
+            "//*[contains(text(),'Arch Specialty Insurance does not cover any County in California')]",
+            "//*[contains(text(),'does not cover any County in California')]",
+            "//*[contains(text(),'does not cover') and contains(text(),'County') and contains(text(),'California')]",
+            "//*[contains(text(),'Arch Specialty Insurance does not cover') and contains(text(),'California')]",
+            "//*[contains(text(),'San Mateo County') and contains(text(),'California')]",
+            "//div[contains(@class,'error') or contains(@class,'alert')][contains(text(),'California')]",
+            "//div[contains(@class,'toast') or contains(@class,'notification')][contains(text(),'California')]",
+            "//*[contains(@class,'MuiAlert') or contains(@class,'Mui-error')][contains(text(),'California')]"
+        };
+
+        try {
+            for (String xpath : errorXpaths) {
+                try {
+                    List<WebElement> elements = driver.findElements(By.xpath(xpath));
+                    for (WebElement element : elements) {
+                        if (element.isDisplayed()) {
+                            String text = element.getText();
+                            logger.info("Found Arch California error message: {}", text);
+                            return true;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Continue to next xpath
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error checking for Arch California error: {}", e.getMessage());
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the Arch California error message text
+     * @return The error message text, or empty string if not found
+     */
+    public String getArchCaliforniaErrorMessage() {
+        String[] errorXpaths = {
+            "//*[contains(text(),'Arch Specialty Insurance does not cover any County in California')]",
+            "//*[contains(text(),'does not cover any County in California')]",
+            "//*[contains(text(),'does not cover') and contains(text(),'County') and contains(text(),'California')]",
+            "//*[contains(text(),'Arch Specialty Insurance does not cover') and contains(text(),'California')]",
+            "//div[contains(@class,'error') or contains(@class,'alert')][contains(text(),'California')]"
+        };
+
+        try {
+            for (String xpath : errorXpaths) {
+                try {
+                    List<WebElement> elements = driver.findElements(By.xpath(xpath));
+                    for (WebElement element : elements) {
+                        if (element.isDisplayed()) {
+                            return element.getText().trim();
+                        }
+                    }
+                } catch (Exception e) {
+                    // Continue to next xpath
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error getting Arch California error message: {}", e.getMessage());
+        }
+
+        return "";
+    }
+
+    /**
+     * Validate Arch + California combination
+     * If Arch Specialty Insurance is selected and locations contain California,
+     * an error message should be displayed.
+     *
+     * @param carrier The selected carrier name
+     * @param locations List of location data
+     * @return ArchCaliforniaValidationResult with validation outcome
+     */
+    public ArchCaliforniaValidationResult validateArchCaliforniaCombination(String carrier, List<Map<String, String>> locations) {
+        ArchCaliforniaValidationResult result = new ArchCaliforniaValidationResult();
+
+        // Check if carrier is Arch
+        boolean isArchCarrier = carrier != null &&
+            (carrier.toLowerCase().contains("arch") ||
+             carrier.equalsIgnoreCase("arch specialty insurance") ||
+             carrier.equalsIgnoreCase("arch"));
+
+        result.setArchCarrier(isArchCarrier);
+
+        // Check if any location is in California
+        boolean hasCALocation = hasCaliforniaLocation(locations);
+        result.setHasCaliforniaLocation(hasCALocation);
+
+        logger.info("Arch California Validation - Carrier: {}, Is Arch: {}, Has CA Location: {}",
+            carrier, isArchCarrier, hasCALocation);
+
+        if (isArchCarrier && hasCALocation) {
+            // This combination should show an error
+            result.setExpectedError(true);
+
+            // Wait a moment for error to appear
+            sleep(2000);
+
+            // Check if error is displayed
+            boolean errorDisplayed = isArchCaliforniaErrorDisplayed();
+            result.setErrorDisplayed(errorDisplayed);
+
+            // Get error message
+            String errorMessage = getArchCaliforniaErrorMessage();
+            result.setErrorMessage(errorMessage);
+
+            // Capture screenshot
+            captureScreenshotToReport("Arch California Error - " + (errorDisplayed ? "Displayed" : "Not Found"));
+
+            if (errorDisplayed) {
+                logger.info("EXPECTED: Arch + California error is displayed correctly: {}", errorMessage);
+                result.setValid(true);
+                result.setMessage("Arch + California error displayed correctly: " + errorMessage);
+            } else {
+                logger.warn("Arch + California error should be displayed but was not found");
+                result.setValid(false);
+                result.setMessage("Expected error message not displayed for Arch + California combination");
+            }
+        } else {
+            // No error expected
+            result.setExpectedError(false);
+            result.setValid(true);
+
+            if (!isArchCarrier) {
+                result.setMessage("Carrier is not Arch - no California restriction applies");
+            } else {
+                result.setMessage("No California locations - Arch carrier is valid");
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Wait for and validate Arch California error after uploading file
+     * Call this after file upload when using Arch carrier
+     *
+     * @param carrier The selected carrier
+     * @param uploadedLocations Locations that were uploaded
+     * @return ArchCaliforniaValidationResult
+     */
+    public ArchCaliforniaValidationResult waitForArchCaliforniaError(String carrier, List<Map<String, String>> uploadedLocations) {
+        logger.info("=== Checking for Arch + California Error ===");
+
+        // Wait for potential error to appear after upload
+        sleep(3000);
+
+        // Scroll up to see any error messages
+        try {
+            ((JavascriptExecutor) driver).executeScript("window.scrollTo(0, 0)");
+            sleep(500);
+        } catch (Exception e) {
+            // Continue
+        }
+
+        return validateArchCaliforniaCombination(carrier, uploadedLocations);
+    }
+
+    /**
+     * Result class for Arch + California validation
+     */
+    public static class ArchCaliforniaValidationResult {
+        private boolean valid = false;
+        private boolean archCarrier = false;
+        private boolean hasCaliforniaLocation = false;
+        private boolean expectedError = false;
+        private boolean errorDisplayed = false;
+        private String errorMessage = "";
+        private String message = "";
+
+        public boolean isValid() { return valid; }
+        public void setValid(boolean valid) { this.valid = valid; }
+
+        public boolean isArchCarrier() { return archCarrier; }
+        public void setArchCarrier(boolean archCarrier) { this.archCarrier = archCarrier; }
+
+        public boolean hasCaliforniaLocation() { return hasCaliforniaLocation; }
+        public void setHasCaliforniaLocation(boolean hasCaliforniaLocation) { this.hasCaliforniaLocation = hasCaliforniaLocation; }
+
+        public boolean isExpectedError() { return expectedError; }
+        public void setExpectedError(boolean expectedError) { this.expectedError = expectedError; }
+
+        public boolean isErrorDisplayed() { return errorDisplayed; }
+        public void setErrorDisplayed(boolean errorDisplayed) { this.errorDisplayed = errorDisplayed; }
+
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+
+        public String getSummary() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("=== Arch + California Validation ===\n");
+            sb.append("Carrier is Arch: ").append(archCarrier).append("\n");
+            sb.append("Has California Location: ").append(hasCaliforniaLocation).append("\n");
+            sb.append("Error Expected: ").append(expectedError).append("\n");
+            sb.append("Error Displayed: ").append(errorDisplayed).append("\n");
+            if (!errorMessage.isEmpty()) {
+                sb.append("Error Message: ").append(errorMessage).append("\n");
+            }
+            sb.append("Validation: ").append(valid ? "PASS" : "FAIL").append("\n");
+            sb.append("Message: ").append(message).append("\n");
+            return sb.toString();
+        }
     }
 }

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Master Policy Test Suite" verbose="2" parallel="false">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.TestListener"/>
+    </listeners>
+
+    <test name="Master Policy Flow Tests">
+        <groups>
+            <run>
+                <include name="MasterPolicyFlow"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.MasterPolicyTest">
+                <methods>
+                    <include name="testPositiveLogin"/>
+                    <include name="testEnterDataOnCreateQuote"/>
+                    <include name="testClickSubmitButton"/>
+                    <include name="testAdd3LocationsOnEditQuote"/>
+                    <include name="testClickBindButton"/>
+                    <include name="testCapturePolicyId"/>
+                    <include name="testValidateMasterPolicyValues"/>
+                    <include name="testValidateActionButtons"/>
+                    <include name="testValidateAccountManagerDropdown"/>
+                    <include name="testValidateLocationCount"/>
+                    <include name="testDownloadPDFFromBindHistory"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+</suite>

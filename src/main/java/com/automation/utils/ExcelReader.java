@@ -467,6 +467,135 @@ public class ExcelReader {
         return value != null ? value : "No";
     }
 
+    // ==================== Edit Quote Config Methods ====================
+
+    /**
+     * Get config value from EditQuoteConfig sheet
+     */
+    public String getEditQuoteConfig(String key) {
+        return getEditQuoteConfigValue(key, null);
+    }
+
+    public String getEditQuoteConfig(String key, String defaultValue) {
+        return getEditQuoteConfigValue(key, defaultValue);
+    }
+
+    private String getEditQuoteConfigValue(String key, String defaultValue) {
+        // Try EditQuoteConfig sheet first
+        String value = getConfigFromSheet("EditQuoteConfig", key);
+        if (value != null) {
+            logger.info("EditQuote Config '{}' = '{}' (from EditQuoteConfig)", key, value);
+            return value;
+        }
+
+        // Fallback to EditQuote sheet
+        value = getConfigFromSheet("EditQuote", key);
+        if (value != null) {
+            logger.info("EditQuote Config '{}' = '{}' (from EditQuote)", key, value);
+            return value;
+        }
+
+        logger.info("EditQuote Config '{}' not found, using default: '{}'", key, defaultValue);
+        return defaultValue;
+    }
+
+    public String getEditQuoteGL() {
+        return getEditQuoteConfigValue("GL", "150");
+    }
+
+    public String getEditQuoteWS() {
+        return getEditQuoteConfigValue("WS", "100");
+    }
+
+    public String getEditQuoteCarrier() {
+        return getEditQuoteConfigValue("Carrier", null);
+    }
+
+    public String getEditQuoteAgent() {
+        return getEditQuoteConfigValue("Agent", null);
+    }
+
+    public String getEditQuoteInsured() {
+        return getEditQuoteConfigValue("Insured", null);
+    }
+
+    public String getEditQuoteState() {
+        return getEditQuoteConfigValue("State", null);
+    }
+
+    public String getEditQuotePolicyFee() {
+        String value = getEditQuoteConfigValue("PolicyFee", null);
+        if (value == null) {
+            value = getEditQuoteConfigValue("Policy Fee", null);
+        }
+        return value != null ? value : "No";
+    }
+
+    /**
+     * Get locations from a specific sheet
+     * Works like getAllLocationData() but for any sheet name
+     */
+    public List<Map<String, String>> getLocationsFromSheet(String sheetName) {
+        if (!sheetExists(sheetName)) {
+            logger.warn("Sheet '{}' does not exist, returning empty list", sheetName);
+            return new ArrayList<>();
+        }
+
+        // Get data using flexible header detection
+        List<Map<String, String>> allRows = getSheetDataAsMapFlexible(sheetName);
+
+        // Filter and normalize location data
+        List<Map<String, String>> validLocations = new ArrayList<>();
+        for (Map<String, String> row : allRows) {
+            // Normalize the row with standard column names
+            Map<String, String> normalizedRow = normalizeLocationRow(row);
+
+            String address = normalizedRow.get("Address");
+            if (address != null && !address.trim().isEmpty() &&
+                    !address.toLowerCase().contains("required") &&
+                    !address.toLowerCase().equals("address")) {
+                validLocations.add(normalizedRow);
+                logger.debug("Valid location found in {}: Address={}", sheetName, address);
+            }
+        }
+
+        logger.info("Retrieved {} valid locations from {} sheet", validLocations.size(), sheetName);
+        return validLocations;
+    }
+
+    /**
+     * Get locations from EditQuote sheet
+     */
+    public List<Map<String, String>> getEditQuoteLocations() {
+        return getLocationsFromSheet("EditQuote");
+    }
+
+    /**
+     * Print all config values from EditQuoteConfig sheet for debugging
+     */
+    public void printEditQuoteConfig() {
+        logger.info("=== All Config Values from EditQuoteConfig ===");
+        if (sheetExists("EditQuoteConfig")) {
+            try {
+                Sheet sheet = getSheet("EditQuoteConfig");
+                for (int i = 0; i <= sheet.getLastRowNum(); i++) {
+                    Row row = sheet.getRow(i);
+                    if (row != null) {
+                        String key = getCellValueAsString(row.getCell(0));
+                        String value = getCellValueAsString(row.getCell(1));
+                        if (key != null && !key.trim().isEmpty()) {
+                            logger.info("  {} = {}", key, value);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Error reading EditQuoteConfig: {}", e.getMessage());
+            }
+        } else {
+            logger.warn("EditQuoteConfig sheet does not exist");
+        }
+    }
+
     /**
      * Print all config values from CreateQuoteConfig sheet for debugging
      */
