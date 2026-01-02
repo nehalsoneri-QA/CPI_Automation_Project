@@ -784,40 +784,97 @@ public class EditQuotePage extends CreateQuotePage {
 		try {
 			logger.info("Looking for Bind Quote Confirmation dialog...");
 
+			// Wait for dialog to appear with explicit wait
+			org.openqa.selenium.support.ui.WebDriverWait dialogWait =
+				new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10));
+
+			// Wait for any dialog/modal to be visible
+			try {
+				dialogWait.until(org.openqa.selenium.support.ui.ExpectedConditions.or(
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						By.xpath("//div[@role='dialog']")),
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						By.xpath("//div[contains(@class,'modal')]")),
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						By.xpath("//div[contains(@class,'MuiDialog')]")),
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						By.xpath("//*[contains(text(),'Bind Quote Confirmation')]"))
+				));
+				logger.info("Dialog detected, looking for confirmation button...");
+			} catch (Exception e) {
+				logger.warn("Dialog may not have appeared: {}", e.getMessage());
+			}
+
+			sleep(1000);
+			captureScreenshotToReport("Bind Quote Confirmation Dialog");
+
 			String[] confirmXpaths = {
-				"//button[contains(text(),'Bind Quote')]",
-				"//div[contains(text(),'Bind Quote Confirmation')]//following::button[contains(text(),'Bind Quote')]",
-				"//div[@role='dialog']//button[contains(text(),'Bind Quote')]",
+				// Primary - exact button text
+				"//button[normalize-space()='Bind Quote']",
 				"//button[text()='Bind Quote']",
+				"//button[contains(text(),'Bind Quote')]",
+				// Dialog context
+				"//div[@role='dialog']//button[contains(text(),'Bind Quote')]",
+				"//div[@role='dialog']//button[contains(text(),'Bind')]",
+				"//div[contains(@class,'MuiDialog')]//button[contains(text(),'Bind')]",
+				"//div[contains(@class,'modal')]//button[contains(text(),'Bind')]",
+				// Following confirmation text
+				"//div[contains(text(),'Bind Quote Confirmation')]//following::button[contains(text(),'Bind')]",
+				"//*[contains(text(),'Confirmation')]//following::button[1]",
+				// Generic confirmation buttons
 				"//button[contains(text(),'Bind') and not(contains(text(),'Generate'))]",
 				"//button[contains(text(),'Confirm')]",
 				"//button[contains(text(),'Yes')]",
 				"//button[contains(text(),'OK')]",
-				"//button[contains(text(),'Proceed')]"
+				"//button[contains(text(),'Proceed')]",
+				"//button[contains(text(),'Submit')]",
+				// By class/role
+				"//div[@role='dialog']//button[contains(@class,'primary')]",
+				"//div[@role='dialog']//button[contains(@class,'confirm')]",
+				"//div[@role='dialog']//button[not(contains(text(),'Cancel'))][not(contains(text(),'Close'))]"
 			};
-
-			sleep(2000);
-			captureScreenshotToReport("Bind Quote Confirmation Dialog");
 
 			for (String xpath : confirmXpaths) {
 				try {
-					WebElement confirmBtn = driver.findElement(By.xpath(xpath));
-					if (confirmBtn.isDisplayed() && confirmBtn.isEnabled()) {
-						logger.info("Found confirmation button with xpath: {}", xpath);
-						click(confirmBtn);
-						logger.info("Clicked Bind Quote confirmation button");
-						sleep(3000);
-						captureScreenshotToReport("After Bind Quote Confirmation");
-						return;
+					java.util.List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+					for (WebElement confirmBtn : buttons) {
+						if (confirmBtn.isDisplayed() && confirmBtn.isEnabled()) {
+							String btnText = confirmBtn.getText().trim();
+							// Skip cancel/close buttons
+							if (btnText.equalsIgnoreCase("Cancel") || btnText.equalsIgnoreCase("Close")) {
+								continue;
+							}
+							logger.info("Found confirmation button: '{}' with xpath: {}", btnText, xpath);
+							scrollIntoView(confirmBtn);
+							sleep(300);
+
+							// Try regular click first, then JS click as fallback
+							try {
+								confirmBtn.click();
+							} catch (Exception clickEx) {
+								logger.warn("Regular click failed, trying JS click");
+								((JavascriptExecutor) driver).executeScript("arguments[0].click();", confirmBtn);
+							}
+
+							logger.info("Clicked Bind Quote confirmation button");
+							sleep(2000);
+							captureScreenshotToReport("After Bind Quote Confirmation");
+
+							// Wait for navigation to Master Policy page
+							waitForMasterPolicyPage(15);
+							return;
+						}
 					}
 				} catch (Exception e) {
-					// Try next
+					// Try next xpath
 				}
 			}
 
 			logger.warn("No Bind Quote confirmation dialog button found");
+			captureScreenshotToReport("Bind Dialog Button Not Found");
 		} catch (Exception e) {
-			logger.debug("Error handling Bind confirmation: {}", e.getMessage());
+			logger.error("Error handling Bind confirmation: {}", e.getMessage());
+			captureScreenshotToReport("Bind Confirmation Error");
 		}
 	}
 
@@ -3090,11 +3147,8 @@ public class EditQuotePage extends CreateQuotePage {
 
 			logger.info("Extracted {} locations from Edit Quote Location Details table", locationData.size());
 
-			// If we didn't get coverage values from table, try Display Computation dialog
-			if (!locationData.isEmpty() && locationData.get(0).getDwelling() <= 0) {
-				logger.info("Coverage values not in table, trying Display Computation dialog...");
-				enrichWithDisplayComputationData(locationData);
-			}
+			// Note: Removed automatic Display Computation dialog call
+			// Coverage values will be retrieved from table columns if available
 
 		} catch (Exception e) {
 			logger.error("Error extracting Edit Quote location data: {}", e.getMessage());

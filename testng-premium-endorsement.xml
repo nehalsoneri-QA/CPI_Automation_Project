@@ -15,9 +15,10 @@
                     <include name="testVerifyEndorsementPageURL"/>
                     <include name="testVerifyEndorsementPageLoaded"/>
                     <include name="testCaptureEndorsementFormValues"/>
-                    <include name="testVerifyLocationCount"/>
+                    <include name="testValidateDisplayComputations"/>
+                    <include name="testAddLocationsOnEndorsement"/>
+                    <include name="testValidatePremiumCalculations"/>
                     <include name="testVerifySubmitButtonState"/>
-                    <include name="testFinalSummary"/>
                 </methods>
             </class>
         </classes>

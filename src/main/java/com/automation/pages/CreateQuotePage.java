@@ -96,9 +96,10 @@ public class CreateQuotePage extends CreateQuoteLocators {
         sleep(2000);
 
         // Wait for form elements to be visible - specifically Agent dropdown
+        boolean formLoaded = false;
         try {
             org.openqa.selenium.support.ui.WebDriverWait formWait =
-                new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+                new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10));
 
             // Wait for any dropdown button to be visible (indicates form is loaded)
             formWait.until(org.openqa.selenium.support.ui.ExpectedConditions.or(
@@ -111,9 +112,25 @@ public class CreateQuotePage extends CreateQuoteLocators {
                 org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
                     org.openqa.selenium.By.xpath("//button[contains(@aria-label,'Agent')]"))
             ));
+            formLoaded = true;
             logger.info("Form elements are visible");
         } catch (Exception e) {
-            logger.warn("Timeout waiting for form elements, continuing anyway: {}", e.getMessage());
+            logger.warn("Form elements not found, refreshing page...");
+        }
+
+        // If form not loaded, refresh page and try again (SPA loading issue fix)
+        if (!formLoaded) {
+            driver.navigate().refresh();
+            sleep(3000);
+            try {
+                org.openqa.selenium.support.ui.WebDriverWait formWait =
+                    new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+                formWait.until(org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+                    org.openqa.selenium.By.xpath("//label[contains(text(),'Agent')]/following::button[1]")));
+                logger.info("Form elements visible after refresh");
+            } catch (Exception e) {
+                logger.warn("Form elements still not found after refresh: {}", e.getMessage());
+            }
         }
 
         sleep(1000);

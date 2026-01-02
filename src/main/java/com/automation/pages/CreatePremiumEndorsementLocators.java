@@ -1,15 +1,14 @@
 package com.automation.pages;
 
-import com.automation.base.BasePage;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
 
 /**
  * Locators for Create Premium Endorsement Page
- * Based on React source: CreateEndorsement.tsx
+ * Extends CreateQuotePage to reuse addLocation functionality
  */
-public class CreatePremiumEndorsementLocators extends BasePage {
+public class CreatePremiumEndorsementLocators extends CreateQuotePage {
 
 	// ==================== Page Header Elements ====================
 
