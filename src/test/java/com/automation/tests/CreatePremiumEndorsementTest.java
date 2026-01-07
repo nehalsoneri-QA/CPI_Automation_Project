@@ -1268,10 +1268,14 @@ public class CreatePremiumEndorsementTest {
 
 		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement - Before Premium Validation");
 
+		// Get carrier name to determine validation logic (same as testAddLocationsOnEndorsement)
+		String carrierName = editQuoteValues != null ? editQuoteValues.getOrDefault("Carrier", "") : "";
+		boolean isArchCarrier = carrierName.toLowerCase().contains("arch");
+		logger.info("Carrier: {} (isArch: {})", carrierName, isArchCarrier);
+
 		// ==================== Location Count Validation ====================
 		logger.info("=== Location Count Validation ===");
 		int currentLocationCount = editEndorsementPage.getLocationCount();
-		int expectedTotalLocations = endorsementLocationsAdded + editEndorsementLocationsAdded;
 
 		// Get original location count from captured data if available
 		int originalLocationCount = 0;
@@ -1286,7 +1290,7 @@ public class CreatePremiumEndorsementTest {
 		logger.info("Location Count: Original={}, Create Endorsement Added={}, Edit Endorsement Added={}, Expected Total={}, Actual={}",
 			originalLocationCount, endorsementLocationsAdded, editEndorsementLocationsAdded, expectedTotal, currentLocationCount);
 
-		// Log location count validation to report
+		// Log location count validation to report (same format as testAddLocationsOnEndorsement)
 		logLocationCountValidationToReport(originalLocationCount, endorsementLocationsAdded, editEndorsementLocationsAdded,
 			expectedTotal, currentLocationCount);
 
@@ -1326,70 +1330,225 @@ public class CreatePremiumEndorsementTest {
 
 		logger.info("All Edit Endorsement premium validations PASSED!");
 
-		// ==================== Pro-Rata Premium Validation for All Newly Added Locations ====================
-		logger.info("=== Pro-Rata Premium Validation for All Newly Added Locations ===");
-		logger.info("Total newly added locations to validate: {} (Create: {}, Edit: {})",
-			endorsementLocationsAdded + editEndorsementLocationsAdded, endorsementLocationsAdded, editEndorsementLocationsAdded);
+		// ==================== Pro-Rata Premium Validation (Same Logic as testAddLocationsOnEndorsement) ====================
+		logger.info("=== Pro-Rata Premium Validation for Edit Endorsement Locations ===");
+		logger.info("Total locations to validate from EditEndorsement sheet: {}", editEndorsementLocationsAdded);
 
-		// Validate Pro-Rata for locations added on Create Endorsement screen
+		// Validate Pro-Rata for locations added on Edit Endorsement screen (same as testAddLocationsOnEndorsement)
+		if (editEndorsementLocationsAdded > 0 && editEndorsementLocationData != null && !editEndorsementLocationData.isEmpty()) {
+			logger.info("Validating Pro-Rata for {} locations added on Edit Endorsement", editEndorsementLocationsAdded);
+
+			// Get only the successfully added locations for validation (same logic as testAddLocationsOnEndorsement)
+			List<Map<String, String>> addedLocations = editEndorsementLocationData;
+			if (editEndorsementLocationsAdded < editEndorsementLocationData.size()) {
+				// If some locations were rejected, only validate the ones that were added
+				addedLocations = editEndorsementLocationData.subList(0, editEndorsementLocationsAdded);
+			}
+
+			// Log locations being validated (same format as testAddLocationsOnEndorsement)
+			logEditEndorsementLocationsToReport(addedLocations);
+
+			// Perform Pro-Rata validation (same as testAddLocationsOnEndorsement)
+			EditPremiumEndorsementPage.ProRataPremiumValidationResult proRataResult =
+				editEndorsementPage.validateProRataPremiumCalculations(addedLocations);
+
+			// Log validation result (same format as testAddLocationsOnEndorsement)
+			if (proRataResult.getError() != null) {
+				logger.warn("Pro-Rata validation encountered an error: {}", proRataResult.getError());
+				logProRataErrorToReport(proRataResult.getError(), "Edit Endorsement");
+			} else {
+				logger.info("Pro-Rata validation completed: {} locations validated, All Passed: {}",
+					proRataResult.getLocationCalculations().size(), proRataResult.isAllPassed());
+
+				// Log detailed Pro-Rata report (same format as testAddLocationsOnEndorsement)
+				logProRataValidationResultToReport(proRataResult, "Edit Endorsement", carrierName, isArchCarrier);
+
+				// Assert that all pro-rata calculations match (same as testAddLocationsOnEndorsement)
+				assertThat(proRataResult.isAllPassed())
+					.as("Pro-Rata Premium Validation: All calculated pro-rata premiums should match displayed values. " +
+						"Formula: Property = (TIV/100 × Rate) × (Days/365), GL = GLAmount × (Days/365), WS = WSAmount × (Days/365). " +
+						"Check HTML report for detailed calculations.")
+					.isTrue();
+			}
+		} else {
+			logger.info("Skipping Edit Endorsement pro-rata validation - no locations were added");
+			logNoLocationsToValidateReport("Edit Endorsement");
+		}
+
+		// Also validate Create Endorsement locations if available (for completeness)
 		if (endorsementLocationsAdded > 0 && endorsementLocationData != null && !endorsementLocationData.isEmpty()) {
-			logger.info("Validating Pro-Rata for {} locations added on Create Endorsement", endorsementLocationsAdded);
+			logger.info("=== Pro-Rata Premium Validation for Create Endorsement Locations ===");
+			logger.info("Validating Pro-Rata for {} locations from CreateEndorsement sheet", endorsementLocationsAdded);
 
 			List<Map<String, String>> createLocations = endorsementLocationData;
 			if (endorsementLocationsAdded < endorsementLocationData.size()) {
 				createLocations = endorsementLocationData.subList(0, endorsementLocationsAdded);
 			}
 
+			// Log locations being validated
+			logCreateEndorsementLocationsToReport(createLocations);
+
 			EditPremiumEndorsementPage.ProRataPremiumValidationResult createProRataResult =
 				editEndorsementPage.validateProRataPremiumCalculations(createLocations);
 
 			if (createProRataResult.getError() != null) {
 				logger.warn("Create Endorsement Pro-Rata validation error: {}", createProRataResult.getError());
-				editEndorsementPage.logHtmlToReport("<div style='padding: 10px; background-color: #f8d7da; border-left: 4px solid #dc3545;'>" +
-					"<strong>Create Endorsement Pro-Rata Error:</strong> " + createProRataResult.getError() + "</div>");
+				logProRataErrorToReport(createProRataResult.getError(), "Create Endorsement");
 			} else {
 				logger.info("Create Endorsement Pro-Rata: {} locations validated, All Passed: {}",
 					createProRataResult.getLocationCalculations().size(), createProRataResult.isAllPassed());
 
+				// Log detailed Pro-Rata report
+				logProRataValidationResultToReport(createProRataResult, "Create Endorsement", carrierName, isArchCarrier);
+
 				assertThat(createProRataResult.isAllPassed())
 					.as("Pro-Rata Premium Validation for Create Endorsement locations: All calculated pro-rata premiums should match. " +
-						"Formula: Property = Annual/365×Days, GL = GLAmount/365×Days, WS = WSAmount/365×Days")
+						"Formula: Property = (TIV/100 × Rate) × (Days/365), GL = GLAmount × (Days/365), WS = WSAmount × (Days/365)")
 					.isTrue();
 			}
-		} else {
-			logger.info("Skipping Create Endorsement pro-rata validation - no locations data available");
-		}
-
-		// Validate Pro-Rata for locations added on Edit Endorsement screen
-		if (editEndorsementLocationsAdded > 0 && editEndorsementLocationData != null && !editEndorsementLocationData.isEmpty()) {
-			logger.info("Validating Pro-Rata for {} locations added on Edit Endorsement", editEndorsementLocationsAdded);
-
-			List<Map<String, String>> editLocations = editEndorsementLocationData;
-			if (editEndorsementLocationsAdded < editEndorsementLocationData.size()) {
-				editLocations = editEndorsementLocationData.subList(0, editEndorsementLocationsAdded);
-			}
-
-			EditPremiumEndorsementPage.ProRataPremiumValidationResult editProRataResult =
-				editEndorsementPage.validateProRataPremiumCalculations(editLocations);
-
-			if (editProRataResult.getError() != null) {
-				logger.warn("Edit Endorsement Pro-Rata validation error: {}", editProRataResult.getError());
-				editEndorsementPage.logHtmlToReport("<div style='padding: 10px; background-color: #f8d7da; border-left: 4px solid #dc3545;'>" +
-					"<strong>Edit Endorsement Pro-Rata Error:</strong> " + editProRataResult.getError() + "</div>");
-			} else {
-				logger.info("Edit Endorsement Pro-Rata: {} locations validated, All Passed: {}",
-					editProRataResult.getLocationCalculations().size(), editProRataResult.isAllPassed());
-
-				assertThat(editProRataResult.isAllPassed())
-					.as("Pro-Rata Premium Validation for Edit Endorsement locations: All calculated pro-rata premiums should match. " +
-						"Formula: Property = Annual/365×Days, GL = GLAmount/365×Days, WS = WSAmount/365×Days")
-					.isTrue();
-			}
-		} else {
-			logger.info("Skipping Edit Endorsement pro-rata validation - no locations data available");
 		}
 
 		logger.info("=== All Pro-Rata Premium Validations Completed ===");
+	}
+
+	/**
+	 * Log Edit Endorsement locations to HTML report (same format as logLocationsToReport)
+	 */
+	private void logEditEndorsementLocationsToReport(List<Map<String, String>> locations) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;'>");
+		html.append("<h3 style='color: #17a2b8; margin-top: 0;'>Locations from EditEndorsement Sheet (Pro-Rata Validation)</h3>");
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 8px;'>#</th><th style='padding: 8px;'>Address</th><th style='padding: 8px;'>Dwelling</th>");
+		html.append("<th style='padding: 8px;'>Rate</th><th style='padding: 8px;'>GL Amount</th><th style='padding: 8px;'>WS Amount</th></tr>");
+
+		for (int i = 0; i < locations.size(); i++) {
+			Map<String, String> loc = locations.get(i);
+			html.append("<tr style='background-color: #ffffff; border-bottom: 1px solid #dee2e6;'>");
+			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("Address", "N/A")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("Dwelling", "0")).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("SuggestedRate", loc.getOrDefault("Rate", "0"))).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("GLAmount", "150")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("WSAmount", "100")).append("</td>");
+			html.append("</tr>");
+		}
+		html.append("</table></div>");
+		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Log Create Endorsement locations to HTML report
+	 */
+	private void logCreateEndorsementLocationsToReport(List<Map<String, String>> locations) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #6c757d;'>");
+		html.append("<h3 style='color: #6c757d; margin-top: 0;'>Locations from CreateEndorsement Sheet (Pro-Rata Validation)</h3>");
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 8px;'>#</th><th style='padding: 8px;'>Address</th><th style='padding: 8px;'>Dwelling</th>");
+		html.append("<th style='padding: 8px;'>Rate</th><th style='padding: 8px;'>GL Amount</th><th style='padding: 8px;'>WS Amount</th></tr>");
+
+		for (int i = 0; i < locations.size(); i++) {
+			Map<String, String> loc = locations.get(i);
+			html.append("<tr style='background-color: #ffffff; border-bottom: 1px solid #dee2e6;'>");
+			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("Address", "N/A")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("Dwelling", "0")).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("SuggestedRate", loc.getOrDefault("Rate", "0"))).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("GLAmount", "150")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("WSAmount", "100")).append("</td>");
+			html.append("</tr>");
+		}
+		html.append("</table></div>");
+		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Log Pro-Rata validation error to report
+	 */
+	private void logProRataErrorToReport(String error, String source) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='padding: 10px; background-color: #f8d7da; border-left: 4px solid #dc3545; margin: 10px 0;'>");
+		html.append("<strong style='color: #dc3545;'>").append(source).append(" Pro-Rata Error:</strong> ");
+		html.append("<span style='color: #721c24;'>").append(error).append("</span></div>");
+		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Log no locations to validate message
+	 */
+	private void logNoLocationsToValidateReport(String source) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0;'>");
+		html.append("<strong style='color: #856404;'>").append(source).append(":</strong> ");
+		html.append("<span style='color: #856404;'>No locations to validate - skipping pro-rata validation</span></div>");
+		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Log Pro-Rata validation result to HTML report (same format as testAddLocationsOnEndorsement)
+	 */
+	private void logProRataValidationResultToReport(EditPremiumEndorsementPage.ProRataPremiumValidationResult result,
+			String source, String carrierName, boolean isArchCarrier) {
+		StringBuilder html = new StringBuilder();
+
+		boolean allPassed = result.isAllPassed();
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+		html.append(allPassed ? "background-color: #d4edda; border-left: 4px solid #28a745;'>" :
+			"background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+
+		html.append("<h3 style='color: ").append(allPassed ? "#28a745" : "#dc3545").append("; margin-top: 0;'>");
+		html.append(source).append(" Pro-Rata Premium Validation: ").append(allPassed ? "PASS" : "FAIL").append("</h3>");
+
+		// Summary info
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000; margin-bottom: 15px;'>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Carrier:</td><td style='padding: 8px;'>").append(carrierName).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Source Sheet:</td><td style='padding: 8px;'>").append(source).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Pro-Rata Days:</td><td style='padding: 8px;'>").append(result.getProRataDays()).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Locations Validated:</td><td style='padding: 8px;'>").append(result.getLocationCalculations().size()).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>All Passed:</td><td style='padding: 8px; font-weight: bold; color: ")
+			.append(allPassed ? "#28a745" : "#dc3545").append(";'>").append(allPassed ? "YES" : "NO").append("</td></tr>");
+		html.append("</table>");
+
+		// Detailed calculations for each location
+		html.append("<h4 style='color: #343a40; margin: 10px 0;'>Detailed Pro-Rata Calculations</h4>");
+		html.append("<p style='color: #6c757d; font-size: 12px; margin-bottom: 10px;'>");
+		html.append("<strong>Formulas:</strong> Property = (TIV/100 × Rate) × (Days/365), GL = GLAmount × (Days/365), WS = WSAmount × (Days/365)</p>");
+
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 8px;'>Loc</th>");
+		html.append("<th style='padding: 8px;'>Address</th>");
+		html.append("<th style='padding: 8px;'>Expected Property</th>");
+		html.append("<th style='padding: 8px;'>Actual Property</th>");
+		html.append("<th style='padding: 8px;'>Expected GL</th>");
+		html.append("<th style='padding: 8px;'>Actual GL</th>");
+		html.append("<th style='padding: 8px;'>Expected WS</th>");
+		html.append("<th style='padding: 8px;'>Actual WS</th>");
+		html.append("<th style='padding: 8px;'>Status</th></tr>");
+
+		List<EditPremiumEndorsementPage.LocationProRataCalculation> calculations = result.getLocationCalculations();
+		for (int i = 0; i < calculations.size(); i++) {
+			EditPremiumEndorsementPage.LocationProRataCalculation calc = calculations.get(i);
+			boolean locPassed = calc.isPropertyMatch() && calc.isGlMatch() && calc.isWsMatch();
+
+			html.append("<tr style='background-color: ").append(locPassed ? "#d4edda" : "#f8d7da").append("; border-bottom: 1px solid #dee2e6;'>");
+			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
+			html.append("<td style='padding: 8px; font-size: 11px;'>").append(calc.getAddress() != null ? calc.getAddress() : "N/A").append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedPropertyPremium())).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualPropertyPremium())).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedGlPremium())).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualGlPremium())).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedWsPremium())).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualWsPremium())).append("</td>");
+			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(locPassed ? "#28a745" : "#dc3545").append(";'>");
+			html.append(locPassed ? "PASS" : "FAIL").append("</td></tr>");
+		}
+		html.append("</table></div>");
+
+		editEndorsementPage.logHtmlToReport(html.toString());
 	}
 
 	/**
