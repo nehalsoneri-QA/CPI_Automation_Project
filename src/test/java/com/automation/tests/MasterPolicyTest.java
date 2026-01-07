@@ -10,6 +10,7 @@ import com.automation.pages.MasterPolicyPage;
 import com.automation.pages.ResetPage;
 import com.automation.utils.ConfigReader;
 import com.automation.utils.ExcelReader;
+import com.automation.utils.TestWaitHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.JavascriptExecutor;
@@ -38,6 +39,7 @@ public class MasterPolicyTest {
 	private EditQuotePage editQuotePage;
 	private MasterPolicyPage masterPolicyPage;
 	private WebDriver driver;
+	private TestWaitHelper waitHelper;
 
 	private static final String ADMIN_EMAIL = "admin@cpiai.com";
 	private static final String ADMIN_PASSWORD = "Admin@123";
@@ -53,6 +55,7 @@ public class MasterPolicyTest {
 	public void initDriver() {
 		driver = DriverManager.getDriver();
 		TestListener.setDriver(driver);
+		waitHelper = new TestWaitHelper(driver);
 
 		loginPage = new LoginPage(driver);
 		resetPage = new ResetPage(driver);
@@ -62,7 +65,7 @@ public class MasterPolicyTest {
 		masterPolicyPage = new MasterPolicyPage(driver);
 
 		driver.get(config.getProperty("base.url", BASE_URL));
-		sleep(2000);
+		waitHelper.waitAfterNavigation();
 	}
 
 	@AfterClass(alwaysRun = true)
@@ -458,11 +461,12 @@ public class MasterPolicyTest {
 
 	// ==================== Helper ====================
 
+	/**
+	 * Wait for page stability - replaces Thread.sleep with explicit waits
+	 * @param millis ignored - kept for backward compatibility, uses explicit wait instead
+	 */
 	private void sleep(long millis) {
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
+		// Use explicit wait instead of Thread.sleep for more reliable test execution
+		waitHelper.waitForPageStability();
 	}
 }

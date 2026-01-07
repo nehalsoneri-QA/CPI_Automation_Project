@@ -5,20 +5,33 @@
         <classes>
             <class name="com.automation.tests.CreatePremiumEndorsementTest">
                 <methods>
-                    <!-- Flow: Login -> Create Quote -> Submit -> Edit Quote -> Bind -> Master Policy -> Premium Endorsement -->
+                    <!-- Flow: Login -> Create Quote -> Submit -> Bind -> Master Policy -> Create Premium Endorsement -> Edit Premium Endorsement -->
+
+                    <!-- Login and Quote Creation -->
                     <include name="testPositiveLogin"/>
                     <include name="testEnterDataOnCreateQuote"/>
                     <include name="testClickSubmitButton"/>
-                    <include name="testAddLocationsOnEditQuote"/>
                     <include name="testClickBindButton"/>
                     <include name="testClickPremiumEndorsementButton"/>
+
+                    <!-- Create Premium Endorsement Page Tests -->
                     <include name="testVerifyEndorsementPageURL"/>
                     <include name="testVerifyEndorsementPageLoaded"/>
                     <include name="testCaptureEndorsementFormValues"/>
+                    <include name="testVerifySubmitButtonState"/>
                     <include name="testValidateDisplayComputations"/>
+                    <include name="testChangeEndorsementEffectiveDate"/>
                     <include name="testAddLocationsOnEndorsement"/>
                     <include name="testValidatePremiumCalculations"/>
-                    <include name="testVerifySubmitButtonState"/>
+                    <include name="testCaptureAllEndorsementData"/>
+                    <include name="testClickCreateEndorsementButton"/>
+
+                    <!-- Edit Premium Endorsement Page Tests -->
+                    <include name="testValidateEditEndorsementData"/>
+                    <include name="testAddLocationsOnEditEndorsement"/>
+                    <include name="testChangeEditEndorsementDate"/>
+                    <include name="testValidateEditEndorsementPremiums"/>
+                    <include name="testValidateEditDisplayComputations"/>
                 </methods>
             </class>
         </classes>

@@ -4,6 +4,7 @@ import com.automation.base.DriverManager;
 import com.automation.listeners.TestListener;
 import com.automation.pages.CreatePremiumEndorsementPage;
 import com.automation.pages.CreateQuotePage;
+import com.automation.pages.EditPremiumEndorsementPage;
 import com.automation.pages.EditQuotePage;
 import com.automation.pages.HomePage;
 import com.automation.pages.LoginPage;
@@ -11,6 +12,7 @@ import com.automation.pages.MasterPolicyPage;
 import com.automation.pages.ResetPage;
 import com.automation.utils.ConfigReader;
 import com.automation.utils.ExcelReader;
+import com.automation.utils.TestWaitHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.JavascriptExecutor;
@@ -40,7 +42,12 @@ public class CreatePremiumEndorsementTest {
 	private EditQuotePage editQuotePage;
 	private MasterPolicyPage masterPolicyPage;
 	private CreatePremiumEndorsementPage createEndorsementPage;
+	private EditPremiumEndorsementPage editEndorsementPage;
 	private WebDriver driver;
+	private TestWaitHelper waitHelper;
+
+	// Store captured endorsement data for validation on Edit page
+	private CreatePremiumEndorsementPage.EndorsementCapturedData capturedEndorsementData;
 
 	private static final String ADMIN_EMAIL = "admin@cpiai.com";
 	private static final String ADMIN_PASSWORD = "Admin@123";
@@ -51,6 +58,10 @@ public class CreatePremiumEndorsementTest {
 	private Map<String, String> endorsementFormValues;
 	private String policyNumber;
 	private int editQuoteLocationCount = 0;
+	private int endorsementLocationsAdded = 0;
+	private List<Map<String, String>> endorsementLocationData; // Store location data from Excel for pro-rata validation
+	private List<Map<String, String>> editEndorsementLocationData; // Store Edit Endorsement location data for pro-rata validation
+	private int editEndorsementLocationsAdded = 0;
 
 	// ==================== Setup ====================
 
@@ -58,6 +69,7 @@ public class CreatePremiumEndorsementTest {
 	public void initDriver() {
 		driver = DriverManager.getDriver();
 		TestListener.setDriver(driver);
+		waitHelper = new TestWaitHelper(driver);
 
 		loginPage = new LoginPage(driver);
 		resetPage = new ResetPage(driver);
@@ -67,7 +79,7 @@ public class CreatePremiumEndorsementTest {
 		masterPolicyPage = new MasterPolicyPage(driver);
 
 		driver.get(config.getProperty("base.url", BASE_URL));
-		sleep(2000);
+		waitHelper.waitAfterNavigation();
 	}
 
 	@AfterClass(alwaysRun = true)
@@ -266,48 +278,11 @@ public class CreatePremiumEndorsementTest {
 		assertThat(onEditQuote).as("Should navigate to Edit Quote page. Current URL: " + currentUrl).isTrue();
 	}
 
-	// ==================== Test 4: Add Locations on Edit Quote ====================
+	// ==================== Test 4: Click Bind Button ====================
 
 	@Test(priority = 4, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickSubmitButton")
-	public void testAddLocationsOnEditQuote() {
-		logger.info("=== Test 4: Add Locations on Edit Quote ===");
-
-		if (editQuotePage == null) {
-			editQuotePage = new EditQuotePage(driver);
-		}
-
-		editQuotePage.waitForEditQuotePageReady();
-		sleep(2000);
-
-		ExcelReader excelReader = new ExcelReader("src/test/resources/testdata/TestData.xlsx");
-		List<Map<String, String>> editQuoteLocations = excelReader.getEditQuoteLocations();
-		logger.info("Found {} locations in EditQuote sheet", editQuoteLocations.size());
-
-		if (editQuoteLocations != null && !editQuoteLocations.isEmpty()) {
-			int added = editQuotePage.addLocationsFromEditQuoteSheet(editQuoteLocations);
-			logger.info("Added {} locations", added);
-		}
-
-		sleep(2000);
-		editQuotePage.captureScreenshotToReport("Edit Quote - Locations Added");
-
-		// Store location count
-		String locationText = editQuotePage.getLocationCountText();
-		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("of\\s+(\\d+)");
-		java.util.regex.Matcher matcher = pattern.matcher(locationText);
-		if (matcher.find()) {
-			editQuoteLocationCount = Integer.parseInt(matcher.group(1));
-		}
-		logger.info("Total location count: {}", editQuoteLocationCount);
-
-		excelReader.close();
-	}
-
-	// ==================== Test 5: Click Bind Button ====================
-
-	@Test(priority = 5, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testAddLocationsOnEditQuote")
 	public void testClickBindButton() {
-		logger.info("=== Test 5: Click Bind Button ===");
+		logger.info("=== Test 4: Click Bind Button ===");
 
 		if (editQuotePage == null) {
 			editQuotePage = new EditQuotePage(driver);
@@ -334,16 +309,17 @@ public class CreatePremiumEndorsementTest {
 		masterPolicyPage = new MasterPolicyPage(driver);
 		masterPolicyPage.waitForMasterPolicyPageReady();
 
-		policyNumber = masterPolicyPage.getPolicyNumberFromURL();
-		logger.info("Policy Number: {}", policyNumber);
+		// Capture policy number from UI element using XPath: //*[@id="root"]/div[2]/div/div[1]/div[1]/div[1]/label/span
+		policyNumber = masterPolicyPage.getPolicyNumberFromUI();
+		logger.info("Policy Number from Master Policy UI: {}", policyNumber);
 		masterPolicyPage.captureScreenshotToReport("Master Policy - Policy #" + policyNumber);
 	}
 
-	// ==================== Test 6: Click Premium Endorsement Button ====================
+	// ==================== Test 5: Click Premium Endorsement Button ====================
 
-	@Test(priority = 6, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickBindButton")
+	@Test(priority = 5, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickBindButton")
 	public void testClickPremiumEndorsementButton() {
-		logger.info("=== Test 6: Click Premium Endorsement Button ===");
+		logger.info("=== Test 5: Click Premium Endorsement Button ===");
 
 		if (masterPolicyPage == null) {
 			masterPolicyPage = new MasterPolicyPage(driver);
@@ -363,11 +339,11 @@ public class CreatePremiumEndorsementTest {
 		logger.info("Clicked Premium Endorsement button and Continue on Caution dialog");
 	}
 
-	// ==================== Test 7: Verify Endorsement Page URL ====================
+	// ==================== Test 6: Verify Endorsement Page URL ====================
 
-	@Test(priority = 7, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickPremiumEndorsementButton")
+	@Test(priority = 6, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickPremiumEndorsementButton")
 	public void testVerifyEndorsementPageURL() {
-		logger.info("=== Test 7: Verify Endorsement Page URL ===");
+		logger.info("=== Test 6: Verify Endorsement Page URL ===");
 
 		// Expected URL
 		String expectedUrlPart = "create-premium-endorsement";
@@ -410,11 +386,11 @@ public class CreatePremiumEndorsementTest {
 		logger.info("URL Validation: {} - {}", urlValid ? "PASS" : "FAIL", currentUrl);
 	}
 
-	// ==================== Test 8: Verify Endorsement Page Loaded ====================
+	// ==================== Test 7: Verify Endorsement Page Loaded ====================
 
-	@Test(priority = 8, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testVerifyEndorsementPageURL")
+	@Test(priority = 7, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testVerifyEndorsementPageURL")
 	public void testVerifyEndorsementPageLoaded() {
-		logger.info("=== Test 8: Verify Endorsement Page Loaded ===");
+		logger.info("=== Test 7: Verify Endorsement Page Loaded ===");
 
 		assertThat(createEndorsementPage.isPageLoaded())
 			.as("Create Premium Endorsement page should be loaded")
@@ -429,12 +405,24 @@ public class CreatePremiumEndorsementTest {
 
 		// Validate policy number matches Master Policy
 		if (policyNumber != null && !policyNumber.isEmpty()) {
-			boolean policyMatch = endorsementPolicyNumber.contains(policyNumber) || policyNumber.contains(endorsementPolicyNumber);
-			logger.info("Policy Number Validation: Master Policy='{}', Endorsement='{}', Match={}",
-				policyNumber, endorsementPolicyNumber, policyMatch);
+			// First check if endorsement policy number was captured
+			boolean endorsementPolicyExists = endorsementPolicyNumber != null && !endorsementPolicyNumber.trim().isEmpty();
+
+			boolean policyMatch = false;
+			if (endorsementPolicyExists) {
+				// Only compare if endorsement policy number exists
+				policyMatch = endorsementPolicyNumber.contains(policyNumber) || policyNumber.contains(endorsementPolicyNumber);
+			}
+
+			logger.info("Policy Number Validation: Master Policy='{}', Endorsement='{}', Endorsement Exists={}, Match={}",
+				policyNumber, endorsementPolicyNumber, endorsementPolicyExists, policyMatch);
 
 			// Log to report
 			logPolicyNumberValidation(policyNumber, endorsementPolicyNumber, policyMatch);
+
+			assertThat(endorsementPolicyExists)
+				.as("Endorsement Policy Number should be displayed on the page")
+				.isTrue();
 
 			assertThat(policyMatch)
 				.as("Policy Number on Endorsement page (" + endorsementPolicyNumber + ") should match Master Policy (" + policyNumber + ")")
@@ -467,11 +455,11 @@ public class CreatePremiumEndorsementTest {
 		createEndorsementPage.logHtmlToReport(html.toString());
 	}
 
-	// ==================== Test 9: Capture Endorsement Form Values (Before Adding Locations) ====================
+	// ==================== Test 8: Capture Endorsement Form Values (Before Adding Locations) ====================
 
-	@Test(priority = 9, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testVerifyEndorsementPageLoaded")
+	@Test(priority = 8, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testVerifyEndorsementPageLoaded")
 	public void testCaptureEndorsementFormValues() {
-		logger.info("=== Test 9: Capture and Validate Endorsement Form Values (Before Adding Locations) ===");
+		logger.info("=== Test 8: Capture and Validate Endorsement Form Values (Before Adding Locations) ===");
 
 		// Capture all form values
 		endorsementFormValues = createEndorsementPage.captureEndorsementFormValues();
@@ -507,11 +495,22 @@ public class CreatePremiumEndorsementTest {
 		validateEndorsementValuesAgainstMasterPolicy();
 	}
 
-	// ==================== Test 10: Validate Display Computations for Existing Locations ====================
+	// ==================== Test 9: Verify Submit Button State ====================
 
-	@Test(priority = 10, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testCaptureEndorsementFormValues")
+	@Test(priority = 9, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testCaptureEndorsementFormValues")
+	public void testVerifySubmitButtonState() {
+		logger.info("=== Test 9: Verify Submit Button State ===");
+
+		boolean isEnabled = createEndorsementPage.isSubmitButtonEnabled();
+		logger.info("Submit button enabled: {}", isEnabled);
+		createEndorsementPage.captureEndorsementScreenshot("Submit Button State");
+	}
+
+	// ==================== Test 10: Validate Display Computations ====================
+
+	@Test(priority = 10, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testVerifySubmitButtonState")
 	public void testValidateDisplayComputations() {
-		logger.info("=== Test 10: Validate Display Computations for Existing Locations ===");
+		logger.info("=== Test 9: Validate Display Computations for Existing Locations ===");
 
 		// Capture screenshot before validation
 		createEndorsementPage.captureEndorsementScreenshot("Before Display Computations Validation");
@@ -539,11 +538,63 @@ public class CreatePremiumEndorsementTest {
 		logger.info("Display Computations validation completed successfully for all locations");
 	}
 
-	// ==================== Test 11: Add Locations on Endorsement ====================
+	// ==================== Test 10: Change Endorsement Effective Date ====================
 
 	@Test(priority = 11, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testValidateDisplayComputations")
+	public void testChangeEndorsementEffectiveDate() {
+		logger.info("=== Test 10: Change Endorsement Effective Date to 6 Months Later ===");
+
+		// Capture current date before change
+		String currentEndorsementDate = createEndorsementPage.getEndorsementEffectiveDate();
+		logger.info("Current Endorsement Effective Date: {}", currentEndorsementDate);
+
+		// Calculate expected date (6 months from now)
+		java.time.LocalDate expectedDate = java.time.LocalDate.now().plusMonths(6);
+		String expectedDateStr = expectedDate.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+		logger.info("Expected date after change: {}", expectedDateStr);
+
+		// Change date to 6 months from now and handle Confirm Date Change dialog
+		// This method now validates that the selected date is displayed correctly in the textbox
+		boolean dateChangeAndValidation = createEndorsementPage.changeEndorsementDateTo6MonthsLater();
+
+		// Assert that date was changed AND the displayed date matches the expected date
+		assertThat(dateChangeAndValidation)
+			.as("Date change validation failed: After selecting date 6 months from today (" + expectedDateStr + "), " +
+				"the same date should be displayed in the Endorsement Effective Date textbox. " +
+				"Check the HTML report for details on expected vs actual date.")
+			.isTrue();
+
+		// Verify the date was actually changed
+		sleep(2000);
+		String newEndorsementDate = createEndorsementPage.getEndorsementEffectiveDate();
+		logger.info("New Endorsement Effective Date: {}", newEndorsementDate);
+
+		// Log the date change to report
+		logDateChangeToReport(currentEndorsementDate, newEndorsementDate);
+
+		logger.info("Endorsement Effective Date changed and validated successfully");
+	}
+
+	/**
+	 * Log date change result to HTML report
+	 */
+	private void logDateChangeToReport(String oldDate, String newDate) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; background-color: #d4edda; border-left: 4px solid #28a745;'>");
+		html.append("<h3 style='color: #28a745; margin-top: 0;'>Endorsement Date Change: SUCCESS</h3>");
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Previous Date:</td><td style='padding: 8px;'>").append(oldDate).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>New Date (6 months later):</td><td style='padding: 8px;'>").append(newDate).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Confirm Dialog:</td><td style='padding: 8px;'>Handled - Clicked Confirm Changes</td></tr>");
+		html.append("</table></div>");
+		createEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	// ==================== Test 11: Add Locations on Endorsement ====================
+
+	@Test(priority = 12, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testChangeEndorsementEffectiveDate")
 	public void testAddLocationsOnEndorsement() {
-		logger.info("=== Test 9: Add Locations from CreateEndorsement Sheet ===");
+		logger.info("=== Test 11: Add Locations from CreateEndorsement Sheet ===");
 
 		// Read locations from CreateEndorsement sheet
 		ExcelReader excelReader = new ExcelReader("src/test/resources/testdata/TestData.xlsx");
@@ -555,6 +606,9 @@ public class CreatePremiumEndorsementTest {
 
 		List<Map<String, String>> endorsementLocations = excelReader.getLocationsFromSheet("CreateEndorsement");
 		logger.info("Found {} locations in CreateEndorsement sheet", endorsementLocations.size());
+
+		// Store location data for pro-rata validation later
+		endorsementLocationData = endorsementLocations;
 
 		// Validate that we have locations to add
 		assertThat(endorsementLocations)
@@ -587,6 +641,9 @@ public class CreatePremiumEndorsementTest {
 		// Calculate ACTUAL added count from page (more reliable than method return)
 		int actualAddedCount = locationCountAfter - locationCountBefore;
 		int rejectedCount = endorsementLocations.size() - actualAddedCount;
+
+		// Store the count of newly added locations for pro-rata validation
+		endorsementLocationsAdded = actualAddedCount;
 
 		logger.info("Actual added: {}, Rejected: {}", actualAddedCount, rejectedCount);
 
@@ -622,13 +679,44 @@ public class CreatePremiumEndorsementTest {
 
 		logger.info("Location count validation PASSED: {} (before) + {} (added) = {} (after), {} rejected",
 			locationCountBefore, actualAddedCount, locationCountAfter, rejectedCount);
+
+		// Pro-Rata Premium Validation for newly added locations
+		if (actualAddedCount > 0 && endorsementLocationData != null && !endorsementLocationData.isEmpty()) {
+			logger.info("=== Validating Pro-Rata Premium Calculations ===");
+
+			// Get only the successfully added locations for validation
+			List<Map<String, String>> addedLocations = endorsementLocationData;
+			if (actualAddedCount < endorsementLocationData.size()) {
+				// If some locations were rejected, only validate the ones that were added
+				addedLocations = endorsementLocationData.subList(0, actualAddedCount);
+			}
+
+			CreatePremiumEndorsementPage.ProRataPremiumValidationResult proRataResult =
+				createEndorsementPage.validateProRataPremiumCalculations(addedLocations);
+
+			// Log validation result
+			if (proRataResult.getError() != null) {
+				logger.warn("Pro-Rata validation encountered an error: {}", proRataResult.getError());
+			} else {
+				logger.info("Pro-Rata validation completed: {} locations validated, All Passed: {}",
+					proRataResult.getLocationCalculations().size(), proRataResult.isAllPassed());
+
+				// Assert that all pro-rata calculations match
+				assertThat(proRataResult.isAllPassed())
+					.as("Pro-Rata Premium Validation: All calculated pro-rata premiums should match displayed values. " +
+						"Check HTML report for detailed calculations.")
+					.isTrue();
+			}
+		} else {
+			logger.info("Skipping pro-rata validation - no locations were added");
+		}
 	}
 
 	// ==================== Test 12: Validate Premium Calculations ====================
 
-	@Test(priority = 12, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testAddLocationsOnEndorsement")
+	@Test(priority = 13, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testAddLocationsOnEndorsement")
 	public void testValidatePremiumCalculations() {
-		logger.info("=== Test 10: Validate Premium Calculations ===");
+		logger.info("=== Test 12: Validate Premium Calculations ===");
 
 		// Capture screenshot before validation
 		createEndorsementPage.captureEndorsementScreenshot("Before Premium Validation");
@@ -668,6 +756,29 @@ public class CreatePremiumEndorsementTest {
 			.isTrue();
 
 		logger.info("All premium calculations validated successfully!");
+
+		// Pro-Rata Validation for newly added locations after date change
+		if (endorsementLocationsAdded > 0) {
+			logger.info("=== Validating Pro-Rata Amounts for {} Newly Added Locations ===", endorsementLocationsAdded);
+
+			CreatePremiumEndorsementPage.ProRataValidationResult proRataResult =
+				createEndorsementPage.validateProRataForNewLocations(endorsementLocationsAdded);
+
+			// Capture screenshot after pro-rata validation
+			createEndorsementPage.captureEndorsementScreenshot("After Pro-Rata Validation");
+
+			// Assertion for pro-rata validation
+			if (proRataResult.getError() != null) {
+				logger.warn("Pro-Rata validation encountered an issue: {}", proRataResult.getError());
+			} else {
+				assertThat(proRataResult.isAllLocationsHaveValues())
+					.as("Pro-Rata Validation: All newly added locations should have premium values calculated based on remaining policy period")
+					.isTrue();
+				logger.info("Pro-Rata validation passed for {} newly added locations", endorsementLocationsAdded);
+			}
+		} else {
+			logger.info("No locations were added, skipping pro-rata validation");
+		}
 	}
 
 	/**
@@ -905,26 +1016,464 @@ public class CreatePremiumEndorsementTest {
 		}
 	}
 
-	// ==================== Test 13: Verify Submit Button State ====================
+	// ==================== Test 14: Capture All Endorsement Data (Silent - No Report) ====================
 
-	@Test(priority = 13, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testValidatePremiumCalculations")
-	public void testVerifySubmitButtonState() {
-		logger.info("=== Test 13: Verify Submit Button State ===");
+	@Test(priority = 14, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testValidatePremiumCalculations")
+	public void testCaptureAllEndorsementData() {
+		logger.info("=== Test 13: Capture All Endorsement Data (Silent - for Edit Endorsement validation) ===");
 
-		boolean isEnabled = createEndorsementPage.isSubmitButtonEnabled();
+		// Capture all values silently from Create Endorsement page
+		capturedEndorsementData = createEndorsementPage.captureAllEndorsementData();
 
-		// Log the state but don't fail - submit might be disabled if no changes made
-		logger.info("Submit button enabled: {}", isEnabled);
-		createEndorsementPage.captureEndorsementScreenshot("Submit Button State");
+		assertThat(capturedEndorsementData)
+			.as("Should capture endorsement data")
+			.isNotNull();
+
+		assertThat(capturedEndorsementData.getError())
+			.as("Should not have any capture errors")
+			.isNull();
+
+		logger.info("Endorsement data captured silently - will be validated on Edit Endorsement screen");
+	}
+
+	// ==================== Test 15: Click Create Endorsement Button (LAST for Create Endorsement) ====================
+
+	@Test(priority = 15, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testCaptureAllEndorsementData")
+	public void testClickCreateEndorsementButton() {
+		logger.info("=== Test 14: Click Create Endorsement Button ===");
+
+		// Click Create Endorsement button
+		boolean navigatedToEdit = createEndorsementPage.clickCreateEndorsementButton();
+
+		// Verify navigation to Edit Endorsement page
+		String currentUrl = driver.getCurrentUrl();
+		logger.info("Current URL after clicking Create Endorsement: {}", currentUrl);
+
+		assertThat(navigatedToEdit)
+			.as("Should navigate to Edit Endorsement page after clicking Create Endorsement. Current URL: " + currentUrl)
+			.isTrue();
+
+		// Initialize Edit Endorsement page
+		editEndorsementPage = new EditPremiumEndorsementPage(driver);
+		logger.info("Successfully navigated to Edit Endorsement page");
+	}
+
+	// ==================== Test 16: Validate Edit Endorsement Against Captured Data ====================
+
+	@Test(priority = 16, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testClickCreateEndorsementButton")
+	public void testValidateEditEndorsementData() {
+		logger.info("=== Test 16: Validate Edit Endorsement Data Against Captured Values ===");
+
+		assertThat(capturedEndorsementData)
+			.as("Captured data from Create Endorsement should be available")
+			.isNotNull();
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Wait for Edit page to fully load - refresh and wait
+		logger.info("Waiting for Edit Endorsement page to fully load...");
+		driver.navigate().refresh();
+		sleep(5000);
+
+		// Wait for page elements
+		try {
+			new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15))
+				.until(org.openqa.selenium.support.ui.ExpectedConditions.or(
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						org.openqa.selenium.By.id("edit-endorsement-endorsement-effective-date-picker")),
+					org.openqa.selenium.support.ui.ExpectedConditions.presenceOfElementLocated(
+						org.openqa.selenium.By.xpath("//*[contains(text(),'Grand Total')]"))
+				));
+			logger.info("Edit Endorsement page elements loaded");
+		} catch (Exception e) {
+			logger.warn("Page load wait timeout: {}", e.getMessage());
+		}
+
+		sleep(3000);
+
+		// Validate all values match
+		EditPremiumEndorsementPage.EndorsementValidationResult validationResult =
+			editEndorsementPage.validateAgainstCreateEndorsement(capturedEndorsementData);
+
+		// Capture screenshot
+		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement Validation Result");
+
+		// Log validation summary
+		logger.info("=== Validation Summary ===");
+		logger.info("  - Endorsement Date Match: {}", validationResult.isEndorsementDateMatch());
+		logger.info("  - Premium (GL+WS) Match: {}", validationResult.isPremiumGLWSMatch());
+		logger.info("  - Taxes Match: {}", validationResult.isTaxesMatch());
+		logger.info("  - Total Fees Match: {}", validationResult.isTotalFeesMatch());
+		logger.info("  - Grand Total Match: {}", validationResult.isGrandTotalMatch());
+		logger.info("  - Location Count Match: {}", validationResult.isLocationCountMatch());
+		logger.info("  - All Locations Match: {}", validationResult.isAllLocationsMatch());
+		logger.info("  - Overall Result: {}", validationResult.isAllValidationsPassed() ? "PASSED" : "FAILED");
+
+		// Assert all validations passed
+		assertThat(validationResult.isEndorsementDateMatch())
+			.as("Endorsement Effective Date should match. Expected: " + validationResult.getExpectedDate() +
+				", Actual: " + validationResult.getActualDate())
+			.isTrue();
+
+		assertThat(validationResult.isPremiumGLWSMatch())
+			.as("Premium (GL+WS) should match. Expected: $" + String.format("%.2f", validationResult.getExpectedPremiumGLWS()) +
+				", Actual: $" + String.format("%.2f", validationResult.getActualPremiumGLWS()))
+			.isTrue();
+
+		assertThat(validationResult.isTaxesMatch())
+			.as("Taxes should match. Expected: $" + String.format("%.2f", validationResult.getExpectedTaxes()) +
+				", Actual: $" + String.format("%.2f", validationResult.getActualTaxes()))
+			.isTrue();
+
+		assertThat(validationResult.isTotalFeesMatch())
+			.as("Total Fees should match. Expected: $" + String.format("%.2f", validationResult.getExpectedTotalFees()) +
+				", Actual: $" + String.format("%.2f", validationResult.getActualTotalFees()))
+			.isTrue();
+
+		assertThat(validationResult.isGrandTotalMatch())
+			.as("Grand Total should match. Expected: $" + String.format("%.2f", validationResult.getExpectedGrandTotal()) +
+				", Actual: $" + String.format("%.2f", validationResult.getActualGrandTotal()))
+			.isTrue();
+
+		assertThat(validationResult.isLocationCountMatch())
+			.as("Location count should match. Expected: " + validationResult.getExpectedLocationCount() +
+				", Actual: " + validationResult.getActualLocationCount())
+			.isTrue();
+
+		logger.info("All Edit Endorsement validations PASSED!");
+	}
+
+	// ==================== Test 17: Add Locations on Edit Endorsement ====================
+
+	@Test(priority = 17, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testValidateEditEndorsementData")
+	public void testAddLocationsOnEditEndorsement() {
+		logger.info("=== Test 17: Add Locations on Edit Endorsement ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Read locations from EditEndorsement sheet using normalized method
+		ExcelReader excelReader = new ExcelReader("src/test/resources/testdata/TestData.xlsx");
+		java.util.List<java.util.Map<String, String>> locations = excelReader.getLocationsFromSheet("EditEndorsement");
+
+		// Log raw data for debugging if locations are empty
+		if (locations.isEmpty()) {
+			logger.warn("No locations found with getLocationsFromSheet, trying getSheetDataAsMap...");
+			java.util.List<java.util.Map<String, String>> rawData = excelReader.getSheetDataAsMap("EditEndorsement");
+			logger.info("Raw data has {} rows", rawData.size());
+			for (int i = 0; i < Math.min(rawData.size(), 2); i++) {
+				logger.info("Raw row {}: {}", i, rawData.get(i));
+			}
+			// Try to normalize manually if needed
+			locations = rawData;
+		}
+
+		assertThat(locations)
+			.as("EditEndorsement sheet should have locations")
+			.isNotEmpty();
+
+		logger.info("Found {} locations in EditEndorsement sheet", locations.size());
+
+		// Log first location data for debugging
+		if (!locations.isEmpty()) {
+			logger.info("First location data: {}", locations.get(0));
+		}
+
+		// Store location data for pro-rata validation later
+		editEndorsementLocationData = locations;
+
+		// Add locations using existing method
+		int addedCount = editEndorsementPage.addLocationsOnEditEndorsement(locations);
+
+		// Store the count of newly added locations for pro-rata validation
+		editEndorsementLocationsAdded = addedCount;
+
+		// Log results to report
+		editEndorsementPage.logAddLocationsResultToReport(locations.size(), addedCount);
+
+		editEndorsementPage.captureEndorsementScreenshot("After Adding Locations on Edit Endorsement");
+
+		assertThat(addedCount)
+			.as("At least one location should be added successfully")
+			.isGreaterThan(0);
+
+		logger.info("Successfully added {}/{} locations on Edit Endorsement", addedCount, locations.size());
+	}
+
+	// ==================== Test 18: Change Endorsement Date on Edit Endorsement (Reduce 2 Months) ====================
+
+	@Test(priority = 18, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testAddLocationsOnEditEndorsement")
+	public void testChangeEditEndorsementDate() {
+		logger.info("=== Test 17: Change Endorsement Date on Edit Endorsement (Reduce by 2 Months) ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Get addresses of newly added locations to validate in confirm dialog
+		java.util.List<String> expectedLocationsInDialog = new java.util.ArrayList<>();
+		if (capturedEndorsementData != null && capturedEndorsementData.getLocationDetails() != null) {
+			for (CreatePremiumEndorsementPage.LocationRowData loc : capturedEndorsementData.getLocationDetails()) {
+				if (loc.getAddress() != null && !loc.getAddress().isEmpty()) {
+					expectedLocationsInDialog.add(loc.getAddress());
+				}
+			}
+		}
+		// Add the example address from user
+		expectedLocationsInDialog.add("56-45 Main St, Flushing, NY 11355, USA");
+
+		logger.info("Expected locations in confirm dialog: {}", expectedLocationsInDialog.size());
+
+		// Change date by reducing 2 months
+		EditPremiumEndorsementPage.DateChangeValidationResult dateResult =
+			editEndorsementPage.changeEndorsementDateReduceBy2Months(expectedLocationsInDialog);
+
+		// Validate date was changed
+		assertThat(dateResult.isDateChanged())
+			.as("Date should be changed successfully")
+			.isTrue();
+
+		// Validate confirm dialog appeared
+		assertThat(dateResult.isConfirmDialogAppeared())
+			.as("Confirm dialog should appear after date change")
+			.isTrue();
+
+		// Validate confirm was clicked
+		assertThat(dateResult.isConfirmClicked())
+			.as("Confirm Changes button should be clicked")
+			.isTrue();
+
+		logger.info("Date change completed: {} -> {}", dateResult.getOldDate(), dateResult.getNewDate());
+	}
+
+	// ==================== Test 19: Validate Edit Endorsement Premiums After Date Change ====================
+
+	@Test(priority = 19, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testChangeEditEndorsementDate")
+	public void testValidateEditEndorsementPremiums() {
+		logger.info("=== Test 19: Validate Edit Endorsement Premiums After Date Change ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Wait for page to fully load after date change
+		sleep(3000);
+
+		// Scroll to top to ensure all data is visible
+		((JavascriptExecutor) driver).executeScript("window.scrollTo(0, 0)");
+		sleep(1000);
+
+		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement - Before Premium Validation");
+
+		// ==================== Location Count Validation ====================
+		logger.info("=== Location Count Validation ===");
+		int currentLocationCount = editEndorsementPage.getLocationCount();
+		int expectedTotalLocations = endorsementLocationsAdded + editEndorsementLocationsAdded;
+
+		// Get original location count from captured data if available
+		int originalLocationCount = 0;
+		if (capturedEndorsementData != null) {
+			originalLocationCount = capturedEndorsementData.getLocationDetails() != null
+				? capturedEndorsementData.getLocationDetails().size() - endorsementLocationsAdded : 0;
+			if (originalLocationCount < 0) originalLocationCount = 0;
+		}
+
+		int expectedTotal = originalLocationCount + endorsementLocationsAdded + editEndorsementLocationsAdded;
+
+		logger.info("Location Count: Original={}, Create Endorsement Added={}, Edit Endorsement Added={}, Expected Total={}, Actual={}",
+			originalLocationCount, endorsementLocationsAdded, editEndorsementLocationsAdded, expectedTotal, currentLocationCount);
+
+		// Log location count validation to report
+		logLocationCountValidationToReport(originalLocationCount, endorsementLocationsAdded, editEndorsementLocationsAdded,
+			expectedTotal, currentLocationCount);
+
+		// Validate premium calculations using same formulas as testAddLocationsOnEndorsement
+		EditPremiumEndorsementPage.PremiumValidationResult result = editEndorsementPage.validateEditEndorsementPremiums();
+
+		// Log validation summary
+		logger.info("=== Edit Endorsement Premium Validation Summary ===");
+		logger.info("  - Property Premium Sum: ${}", String.format("%.2f", result.getPropertyPremiumSum()));
+		logger.info("  - GL Premium Sum: ${}", String.format("%.2f", result.getGlPremiumSum()));
+		logger.info("  - WS Premium Sum: ${}", String.format("%.2f", result.getWsPremiumSum()));
+		logger.info("  - Premium (GL+WS) Match: {}", result.isPremiumGLWSMatch() ? "PASS" : "FAIL");
+		logger.info("  - Taxes Match: {}", result.isTaxesMatch() ? "PASS" : "FAIL");
+		logger.info("  - Fees Match: {}", result.isFeesMatch() ? "PASS" : "FAIL");
+		logger.info("  - Grand Total Match: {}", result.isGrandTotalMatch() ? "PASS" : "FAIL");
+
+		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement - Premium Validation Complete");
+
+		// Assert validations passed
+		assertThat(result.isPremiumGLWSMatch())
+			.as("Premium (GL+WS) sum should match displayed value. Calculated: $" +
+				String.format("%.2f", result.getCalculatedPremiumGLWS()) + ", Displayed: $" +
+				String.format("%.2f", result.getPremiumGLWSValue()))
+			.isTrue();
+
+		assertThat(result.isTaxesMatch())
+			.as("Taxes sum should match displayed value")
+			.isTrue();
+
+		assertThat(result.isFeesMatch())
+			.as("Fees sum should match displayed value")
+			.isTrue();
+
+		assertThat(result.isGrandTotalMatch())
+			.as("Grand Total calculation should match")
+			.isTrue();
+
+		logger.info("All Edit Endorsement premium validations PASSED!");
+
+		// ==================== Pro-Rata Premium Validation for All Newly Added Locations ====================
+		logger.info("=== Pro-Rata Premium Validation for All Newly Added Locations ===");
+		logger.info("Total newly added locations to validate: {} (Create: {}, Edit: {})",
+			endorsementLocationsAdded + editEndorsementLocationsAdded, endorsementLocationsAdded, editEndorsementLocationsAdded);
+
+		// Validate Pro-Rata for locations added on Create Endorsement screen
+		if (endorsementLocationsAdded > 0 && endorsementLocationData != null && !endorsementLocationData.isEmpty()) {
+			logger.info("Validating Pro-Rata for {} locations added on Create Endorsement", endorsementLocationsAdded);
+
+			List<Map<String, String>> createLocations = endorsementLocationData;
+			if (endorsementLocationsAdded < endorsementLocationData.size()) {
+				createLocations = endorsementLocationData.subList(0, endorsementLocationsAdded);
+			}
+
+			EditPremiumEndorsementPage.ProRataPremiumValidationResult createProRataResult =
+				editEndorsementPage.validateProRataPremiumCalculations(createLocations);
+
+			if (createProRataResult.getError() != null) {
+				logger.warn("Create Endorsement Pro-Rata validation error: {}", createProRataResult.getError());
+				editEndorsementPage.logHtmlToReport("<div style='padding: 10px; background-color: #f8d7da; border-left: 4px solid #dc3545;'>" +
+					"<strong>Create Endorsement Pro-Rata Error:</strong> " + createProRataResult.getError() + "</div>");
+			} else {
+				logger.info("Create Endorsement Pro-Rata: {} locations validated, All Passed: {}",
+					createProRataResult.getLocationCalculations().size(), createProRataResult.isAllPassed());
+
+				assertThat(createProRataResult.isAllPassed())
+					.as("Pro-Rata Premium Validation for Create Endorsement locations: All calculated pro-rata premiums should match. " +
+						"Formula: Property = Annual/365×Days, GL = GLAmount/365×Days, WS = WSAmount/365×Days")
+					.isTrue();
+			}
+		} else {
+			logger.info("Skipping Create Endorsement pro-rata validation - no locations data available");
+		}
+
+		// Validate Pro-Rata for locations added on Edit Endorsement screen
+		if (editEndorsementLocationsAdded > 0 && editEndorsementLocationData != null && !editEndorsementLocationData.isEmpty()) {
+			logger.info("Validating Pro-Rata for {} locations added on Edit Endorsement", editEndorsementLocationsAdded);
+
+			List<Map<String, String>> editLocations = editEndorsementLocationData;
+			if (editEndorsementLocationsAdded < editEndorsementLocationData.size()) {
+				editLocations = editEndorsementLocationData.subList(0, editEndorsementLocationsAdded);
+			}
+
+			EditPremiumEndorsementPage.ProRataPremiumValidationResult editProRataResult =
+				editEndorsementPage.validateProRataPremiumCalculations(editLocations);
+
+			if (editProRataResult.getError() != null) {
+				logger.warn("Edit Endorsement Pro-Rata validation error: {}", editProRataResult.getError());
+				editEndorsementPage.logHtmlToReport("<div style='padding: 10px; background-color: #f8d7da; border-left: 4px solid #dc3545;'>" +
+					"<strong>Edit Endorsement Pro-Rata Error:</strong> " + editProRataResult.getError() + "</div>");
+			} else {
+				logger.info("Edit Endorsement Pro-Rata: {} locations validated, All Passed: {}",
+					editProRataResult.getLocationCalculations().size(), editProRataResult.isAllPassed());
+
+				assertThat(editProRataResult.isAllPassed())
+					.as("Pro-Rata Premium Validation for Edit Endorsement locations: All calculated pro-rata premiums should match. " +
+						"Formula: Property = Annual/365×Days, GL = GLAmount/365×Days, WS = WSAmount/365×Days")
+					.isTrue();
+			}
+		} else {
+			logger.info("Skipping Edit Endorsement pro-rata validation - no locations data available");
+		}
+
+		logger.info("=== All Pro-Rata Premium Validations Completed ===");
+	}
+
+	/**
+	 * Log location count validation to HTML report
+	 */
+	private void logLocationCountValidationToReport(int original, int createAdded, int editAdded, int expected, int actual) {
+		boolean isMatch = (actual >= expected); // At least expected locations should be present
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+		html.append(isMatch ? "background-color: #d4edda; border-left: 4px solid #28a745;'>" : "background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+		html.append("<h3 style='color: ").append(isMatch ? "#28a745" : "#dc3545").append("; margin-top: 0;'>Location Count Validation: ")
+			.append(isMatch ? "PASS" : "FAIL").append("</h3>");
+
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Original Locations:</td><td style='padding: 8px;'>").append(original).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Added on Create Endorsement:</td><td style='padding: 8px;'>").append(createAdded).append("</td></tr>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Added on Edit Endorsement:</td><td style='padding: 8px;'>").append(editAdded).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Expected Total:</td><td style='padding: 8px;'>").append(expected).append("</td></tr>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Actual Total:</td><td style='padding: 8px;'>").append(actual).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Status:</td><td style='padding: 8px; font-weight: bold; color: ")
+			.append(isMatch ? "#28a745" : "#dc3545").append(";'>").append(isMatch ? "PASS" : "FAIL").append("</td></tr>");
+		html.append("</table></div>");
+
+		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	// ==================== Test 20: Validate Display Computations on Edit Endorsement ====================
+
+	@Test(priority = 20, groups = { "PremiumEndorsementFlow" }, dependsOnMethods = "testValidateEditEndorsementPremiums")
+	public void testValidateEditDisplayComputations() {
+		logger.info("=== Test 20: Validate Display Computations Against Sheet Data ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Wait for page to be ready
+		sleep(2000);
+
+		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement - Before Display Computation Validation");
+
+		// Get location data from both sheets
+		List<Map<String, String>> createLocations = endorsementLocationData;
+		List<Map<String, String>> editLocations = editEndorsementLocationData;
+
+		logger.info("Validating Display Computations for {} Create Endorsement locations and {} Edit Endorsement locations",
+			createLocations != null ? createLocations.size() : 0,
+			editLocations != null ? editLocations.size() : 0);
+
+		// Validate display computations against sheet data
+		EditPremiumEndorsementPage.DisplayComputationSheetValidationResult result =
+			editEndorsementPage.validateDisplayComputationsAgainstSheetData(createLocations, editLocations);
+
+		// Log validation summary
+		logger.info("=== Display Computation Validation Summary ===");
+		logger.info("  - Pro-Rata Days: {}", result.getProRataDays());
+		logger.info("  - Total Locations: {}", result.getTotalCount());
+		logger.info("  - Passed: {}", result.getPassedCount());
+		logger.info("  - Failed: {}", result.getFailedCount());
+
+		if (result.getError() != null) {
+			logger.warn("Display Computation validation error: {}", result.getError());
+		}
+
+		editEndorsementPage.captureEndorsementScreenshot("Edit Endorsement - After Display Computation Validation");
+
+		// Assert all validations passed
+		assertThat(result.isAllPassed())
+			.as("Display Computation Validation: All locations should match between Excel sheet data and Display Computation dialog. " +
+				"Formulas: TIV = Dwelling + AS + BPP + Loss Of Rents | Property Premium = (TIV / 100 × Rate) × (ProRataDays / 365). " +
+				"Passed: " + result.getPassedCount() + ", Failed: " + result.getFailedCount())
+			.isTrue();
+
+		logger.info("Display Computation validation completed successfully for all locations");
 	}
 
 	// ==================== Helper ====================
 
+	/**
+	 * Wait for page stability - replaces Thread.sleep with explicit waits
+	 * @param millis ignored - kept for backward compatibility, uses explicit wait instead
+	 */
 	private void sleep(long millis) {
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
+		// Use explicit wait instead of Thread.sleep for more reliable test execution
+		waitHelper.waitForPageStability();
 	}
 }

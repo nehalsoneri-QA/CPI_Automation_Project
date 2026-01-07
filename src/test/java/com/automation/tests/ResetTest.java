@@ -4,6 +4,7 @@ import com.automation.listeners.TestListener;
 import com.automation.pages.LoginPage;
 import com.automation.pages.ResetPage;
 import com.automation.utils.ConfigReader;
+import com.automation.utils.TestWaitHelper;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,6 +32,7 @@ public class ResetTest {
     private LoginPage loginPage;
     private ResetPage resetPage;
     private WebDriver driver;
+    private TestWaitHelper waitHelper;
 
     @BeforeClass(alwaysRun = true)
     public void initDriver() {
@@ -48,6 +50,7 @@ public class ResetTest {
 
         loginPage = new LoginPage(driver);
         resetPage = new ResetPage(driver);
+        waitHelper = new TestWaitHelper(driver);
         driver.get(config.getProperty("base.url"));
         logger.info("Browser initialized and navigated to: {}", config.getProperty("base.url"));
     }
@@ -69,12 +72,8 @@ public class ResetTest {
         // Login with valid credentials from Excel
         loginPage.login();
 
-        // Wait for page to load after login
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Wait for page to load after login using explicit wait
+        waitHelper.waitAfterNavigation();
 
         // Check if reset password page is displayed
         String currentUrl = driver.getCurrentUrl();
@@ -90,12 +89,8 @@ public class ResetTest {
             resetPage.clickSkipButton();
             logger.info("Clicked skip button on reset password page");
 
-            // Wait for redirect after skip
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            // Wait for redirect after skip using explicit wait
+            waitHelper.waitForUrlNotContains("/reset_password");
 
             // Verify redirected to dashboard/home page
             String urlAfterSkip = driver.getCurrentUrl();

@@ -86,6 +86,53 @@ public class MasterPolicyPage extends CreateQuotePage {
 		return "";
 	}
 
+	/**
+	 * Get policy number from UI element on Master Policy Details page
+	 * XPath: //*[@id="root"]/div[2]/div/div[1]/div[1]/div[1]/label/span
+	 */
+	public String getPolicyNumberFromUI() {
+		try {
+			// Primary XPath provided by user
+			String primaryXpath = "//*[@id='root']/div[2]/div/div[1]/div[1]/div[1]/label/span";
+
+			WebElement policyElement = driver.findElement(By.xpath(primaryXpath));
+			String policyNumber = policyElement.getText().trim();
+
+			if (policyNumber != null && !policyNumber.isEmpty()) {
+				logger.info("Policy Number from Master Policy UI: {}", policyNumber);
+				return policyNumber;
+			}
+		} catch (Exception e) {
+			logger.warn("Error getting policy number from primary XPath: {}", e.getMessage());
+		}
+
+		// Fallback XPaths
+		String[] fallbackXpaths = {
+			"//label/span[contains(text(),'')]",
+			"//*[contains(@class,'policy')]//span",
+			"//div[contains(@class,'policy-number')]//span"
+		};
+
+		for (String xpath : fallbackXpaths) {
+			try {
+				List<WebElement> elements = driver.findElements(By.xpath(xpath));
+				for (WebElement el : elements) {
+					String text = el.getText().trim();
+					if (text != null && !text.isEmpty() && text.matches("\\d+")) {
+						logger.info("Policy Number from fallback XPath: {}", text);
+						return text;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		// Last resort: try URL
+		logger.warn("Could not get policy number from UI, falling back to URL");
+		return getPolicyNumberFromURL();
+	}
+
 	// ==================== Set Expected Values ====================
 
 	/**

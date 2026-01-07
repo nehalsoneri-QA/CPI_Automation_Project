@@ -15,30 +15,39 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+import com.automation.utils.TestWaitHelper;
+
 public class InvoiceNegativeDueVerification {
 
     private By policyButtons = By.xpath("//table//tr/td[1]//button");
 
     WebDriver driver;
     WebDriverWait wait;
+    TestWaitHelper waitHelper;
 
     Workbook workbook;
     Sheet sheet;
     int rowCount = 1;
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         System.out.println("[MAIN] Execution started");
 
         InvoiceNegativeDueVerification test = new InvoiceNegativeDueVerification();
-        test.setup();
-        test.initializeExcel();
-        test.login("admin@cpiai.com", "Admin@123");
-        test.navigateToInvoicePage();
-        test.applyDateFilter("06/01/2025", "11/30/2025");
-        test.selectRecordsPerPage("250");
-        test.processAllPages();
-        test.saveExcel();
-        test.tearDown();
+        try {
+            test.setup();
+            test.initializeExcel();
+            test.login("admin@cpiai.com", "Admin@123");
+            test.navigateToInvoicePage();
+            test.applyDateFilter("06/01/2025", "11/30/2025");
+            test.selectRecordsPerPage("250");
+            test.processAllPages();
+            test.saveExcel();
+        } catch (Exception e) {
+            System.err.println("[ERROR] " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            test.tearDown();
+        }
 
         System.out.println("[MAIN] Execution completed");
     }
@@ -47,6 +56,7 @@ public class InvoiceNegativeDueVerification {
         System.out.println("[SETUP] Launching Chrome browser");
         driver = new ChromeDriver();
         wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+        waitHelper = new TestWaitHelper(driver);
         driver.manage().window().maximize();
         driver.get("https://cpiai-dev.attri.ai/login");
         System.out.println("[SETUP] Navigated to login page");
@@ -65,12 +75,12 @@ public class InvoiceNegativeDueVerification {
         System.out.println("[EXCEL] Header created");
     }
 
-    public void login(String username, String password) throws InterruptedException {
+    public void login(String username, String password) {
         System.out.println("[LOGIN] Entering credentials");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("login-email"))).sendKeys(username);
         driver.findElement(By.id("login-password")).sendKeys(password);
         driver.findElement(By.xpath("//button[@id='login-submit-btn']")).click();
-        Thread.sleep(2000);
+        waitHelper.waitAfterNavigation();
 
         System.out.println("[LOGIN] Skipping reset password popup");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("reset-password-skip-link"))).click();
@@ -81,16 +91,17 @@ public class InvoiceNegativeDueVerification {
     }
 
     // ---------------- NAVIGATION ----------------
-    public void navigateToInvoicePage() throws InterruptedException {
+    public void navigateToInvoicePage() {
         System.out.println("[NAVIGATION] Navigating to Invoice page");
-        Thread.sleep(2000);
-        driver.findElement(By.id("desktop-nav-invoices")).click();
-        Thread.sleep(5000);
+        waitHelper.waitForPageStability();
+        wait.until(ExpectedConditions.elementToBeClickable(By.id("desktop-nav-invoices"))).click();
+        waitHelper.waitAfterNavigation();
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//table//tr")));
         System.out.println("[NAVIGATION] Invoice page opened");
     }
 
     // ---------------- DATE FILTER ----------------
-    public void applyDateFilter(String fromDate, String toDate) throws InterruptedException {
+    public void applyDateFilter(String fromDate, String toDate) {
         System.out.println("[FILTER] Applying date filter from " + fromDate + " to " + toDate);
 
         WebElement fromDateInput = wait.until(ExpectedConditions.visibilityOfElementLocated(
@@ -98,7 +109,7 @@ public class InvoiceNegativeDueVerification {
         fromDateInput.click();
         fromDateInput.sendKeys(Keys.CONTROL, "a");
         fromDateInput.sendKeys(Keys.DELETE);
-        Thread.sleep(2000);
+        waitHelper.waitAfterFormAction();
         fromDateInput.sendKeys(fromDate);
         fromDateInput.sendKeys(Keys.ENTER);
 
@@ -107,17 +118,17 @@ public class InvoiceNegativeDueVerification {
         toDateInput.click();
         toDateInput.sendKeys(Keys.CONTROL, "a");
         toDateInput.sendKeys(Keys.DELETE);
-        Thread.sleep(2000);
+        waitHelper.waitAfterFormAction();
         toDateInput.sendKeys(toDate);
         toDateInput.sendKeys(Keys.ENTER);
 
         wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//table//tr")));
-        Thread.sleep(5000);
+        waitHelper.waitAfterNavigation();
         System.out.println("[FILTER] Date filter applied successfully");
     }
 
     // ---------------- PAGINATION SIZE ----------------
-    public void selectRecordsPerPage(String value) throws InterruptedException {
+    public void selectRecordsPerPage(String value) {
         System.out.println("[PAGINATION] Setting records per page to " + value);
 
         By pageSizeButton = By.id("invoice-list-page-size-selector");
@@ -127,12 +138,13 @@ public class InvoiceNegativeDueVerification {
         wait.until(ExpectedConditions.elementToBeClickable(option)).click();
 
         wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//table//tr")));
-        Thread.sleep(7000);
+        waitHelper.waitAfterNavigation();
+        waitForLoaderToDisappear();
         System.out.println("[PAGINATION] Records per page updated");
     }
 
     // ---------------- PROCESS ALL PAGES ----------------
-    public void processAllPages() throws InterruptedException {
+    public void processAllPages() {
         boolean hasNextPage = true;
         int page = 1;
 
@@ -146,7 +158,7 @@ public class InvoiceNegativeDueVerification {
     }
 
     // ---------------- CORE LOGIC (ONE PAGE) ----------------
-    public void verifyNegativeDueAmountsOnCurrentPage() throws InterruptedException {
+    public void verifyNegativeDueAmountsOnCurrentPage() {
 
         waitForLoaderToDisappear();
 
@@ -231,7 +243,7 @@ public class InvoiceNegativeDueVerification {
     }
 
     // ---------------- NEXT PAGE ----------------
-    public boolean goToNextPageIfExists() throws InterruptedException {
+    public boolean goToNextPageIfExists() {
         WebElement nextButton = driver.findElement(
                 By.id("invoice-list-pagination-next"));
 
@@ -239,7 +251,8 @@ public class InvoiceNegativeDueVerification {
             System.out.println("[PAGINATION] Navigating to next page");
             nextButton.click();
             wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//table//tr")));
-            Thread.sleep(5000);
+            waitHelper.waitAfterNavigation();
+            waitForLoaderToDisappear();
             return true;
         }
 

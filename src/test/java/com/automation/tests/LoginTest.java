@@ -5,6 +5,7 @@ import com.automation.listeners.TestListener;
 import com.automation.pages.LoginPage;
 import com.automation.pages.ResetPage;
 import com.automation.utils.ConfigReader;
+import com.automation.utils.TestWaitHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.WebDriver;
@@ -32,12 +33,14 @@ public class LoginTest {
     private LoginPage loginPage;
     private ResetPage resetPage;
     private WebDriver driver;
+    private TestWaitHelper waitHelper;
     private boolean isFirstTest = true;
 
     @BeforeClass(alwaysRun = true)
     public void initDriver() {
         // Get shared driver instance
         driver = DriverManager.getDriver();
+        waitHelper = new TestWaitHelper(driver);
 
         // Set driver reference for TestListener to capture screenshots
         TestListener.setDriver(driver);
@@ -150,13 +153,13 @@ public class LoginTest {
 
     // ==================== Helper Methods ====================
 
-    // Sleep for specified milliseconds
+    /**
+     * Wait for page stability - replaces Thread.sleep with explicit waits
+     * @param milliseconds ignored - kept for backward compatibility, uses explicit wait instead
+     */
     private void sleep(long milliseconds) {
-        try {
-            Thread.sleep(milliseconds);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Use explicit wait instead of Thread.sleep for more reliable test execution
+        waitHelper.waitForPageStability();
     }
 
     // ==================== Custom Annotation ====================

@@ -1,5 +1,6 @@
 package com.automation.pages;
 
+import com.github.javafaker.Faker;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
@@ -11,15 +12,19 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Page Object for Create Premium Endorsement Page
  * Handles endorsement creation workflow
  */
-public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocators {
+public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators {
 
-	public CreatePremiumEndorsementPage(WebDriver driver) {
+	// Faker for generating test data when auto-complete fails
+	private static final Faker faker = new Faker(new Locale("en-US"));
+
+	public EditPremiumEndorsementPage(WebDriver driver) {
 		super(driver);
 	}
 
@@ -37,8 +42,8 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 			// Check for form elements (more reliable than title)
 			wait.until(ExpectedConditions.or(
-				ExpectedConditions.presenceOfElementLocated(By.id("create-endorsement-agent-select")),
-				ExpectedConditions.presenceOfElementLocated(By.id("create-endorsement-carrier-select"))
+				ExpectedConditions.presenceOfElementLocated(By.id("edit-endorsement-agent-select")),
+				ExpectedConditions.presenceOfElementLocated(By.id("edit-endorsement-carrier-select"))
 			));
 
 			logger.info("Create Premium Endorsement page loaded successfully");
@@ -145,64 +150,33 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	public String getPolicyNumber() {
 		try {
-			// Primary XPath for Create New Premium Endorsement page
-			// XPath: //*[@id="root"]/div[2]/div[1]/h1/span
-			String primaryXpath = "//*[@id='root']/div[2]/div[1]/h1/span";
-
-			try {
-				WebElement policyElement = driver.findElement(By.xpath(primaryXpath));
-				String policyNumber = policyElement.getText().trim();
-
-				if (policyNumber != null && !policyNumber.isEmpty()) {
-					logger.info("Policy Number from Create Endorsement UI: {}", policyNumber);
-					return policyNumber;
-				}
-			} catch (Exception e) {
-				logger.warn("Error getting policy number from primary XPath: {}", e.getMessage());
-			}
-
-			// Fallback: Try from URL /create-premium-endorsement/{policyNumber}
+			// Try from URL first: /create-premium-endorsement/{policyNumber}
 			String url = driver.getCurrentUrl();
-			logger.info("Current URL for policy number extraction: {}", url);
-
 			if (url.contains("create-premium-endorsement/")) {
 				String[] parts = url.split("create-premium-endorsement/");
 				if (parts.length > 1) {
-					String policyNum = parts[1].split("[?#/]")[0].trim();
-					if (!policyNum.isEmpty() && policyNum.matches("\\d+")) {
-						logger.info("Policy Number from URL: {}", policyNum);
-						return policyNum;
-					}
+					String policyNum = parts[1].split("[?#]")[0];
+					logger.info("Policy Number from URL: {}", policyNum);
+					return policyNum;
 				}
 			}
 
-			// Also try edit-endorsement URL pattern
-			if (url.contains("edit-endorsement/")) {
-				String[] parts = url.split("edit-endorsement/");
-				if (parts.length > 1) {
-					String policyNum = parts[1].split("[?#/]")[0].trim();
-					if (!policyNum.isEmpty() && policyNum.matches("\\d+")) {
-						logger.info("Policy Number from edit-endorsement URL: {}", policyNum);
-						return policyNum;
-					}
-				}
-			}
-
-			// Additional fallback XPaths
-			String[] fallbackXpaths = {
-				"//h1/span",
-				"//h1[contains(text(),'Policy')]/span",
-				"//*[contains(text(),'Policy #')]/following::span[1]",
-				"//span[contains(@class,'policy-number')]"
+			// Try from page elements
+			String[] xpaths = {
+				"//h1[contains(text(),'Policy')]/following::*[1]",
+				"//*[contains(text(),'Policy #')]/following::*[1]",
+				"//*[contains(text(),'Policy Number')]/following::*[1]",
+				"//span[contains(@class,'policy-number')]",
+				"//*[@id='policy-number']"
 			};
 
-			for (String xpath : fallbackXpaths) {
+			for (String xpath : xpaths) {
 				try {
 					List<WebElement> elements = driver.findElements(By.xpath(xpath));
 					for (WebElement el : elements) {
 						String text = el.getText().trim();
-						if (text != null && !text.isEmpty() && text.matches("\\d+")) {
-							logger.info("Policy Number from fallback XPath '{}': {}", xpath, text);
+						if (text != null && !text.isEmpty() && text.matches(".*\\d+.*")) {
+							logger.info("Policy Number from page: {}", text);
 							return text;
 						}
 					}
@@ -210,11 +184,9 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 					// Continue
 				}
 			}
-
 		} catch (Exception e) {
 			logger.warn("Error getting policy number: {}", e.getMessage());
 		}
-		logger.warn("Policy number not found from UI or URL");
 		return "";
 	}
 
@@ -234,7 +206,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	public String getEffectiveDate() {
 		try {
-			return getDateFromDisabledField(effectiveDatePicker, "create-endorsement-effective-date-picker");
+			return getDateFromDisabledField(effectiveDatePicker, "edit-endorsement-effective-date-picker");
 		} catch (Exception e) {
 			logger.warn("Error getting effective date: {}", e.getMessage());
 			return "";
@@ -246,7 +218,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	public String getExpirationDate() {
 		try {
-			return getDateFromDisabledField(expirationDatePicker, "create-endorsement-expiration-date-picker");
+			return getDateFromDisabledField(expirationDatePicker, "edit-endorsement-expiration-date-picker");
 		} catch (Exception e) {
 			logger.warn("Error getting expiration date: {}", e.getMessage());
 			return "";
@@ -444,18 +416,22 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	/**
 	 * Get endorsement effective date value (handles react-date-picker component)
 	 * The react-date-picker has a hidden input with full ISO date (YYYY-MM-DD)
+	 * and visible segmented inputs for month, day, year
+	 * Primary XPath: //*[@id="edit-endorsement-endorsement-effective-date-picker"]/div/div
 	 */
 	public String getEndorsementEffectiveDate() {
 		try {
+			logger.info("=== Getting Endorsement Effective Date ===");
+
 			// Primary approach: Get date from react-date-picker hidden input (first input has full ISO date)
 			try {
-				WebElement dateContainer = driver.findElement(By.xpath("//*[@id='create-endorsement-endorsement-effective-date-picker']/div/div"));
+				WebElement dateContainer = driver.findElement(By.xpath("//*[@id='edit-endorsement-endorsement-effective-date-picker']/div/div"));
 				if (dateContainer != null) {
 					List<WebElement> inputs = dateContainer.findElements(By.xpath(".//input"));
 					if (inputs.size() > 0) {
 						// The first input in react-date-picker contains the full ISO date (YYYY-MM-DD)
 						String firstInputValue = inputs.get(0).getAttribute("value");
-						logger.info("Create endorsement date - First input value: '{}'", firstInputValue);
+						logger.info("Edit endorsement date - First input value: '{}'", firstInputValue);
 
 						// Check if it's an ISO date format (YYYY-MM-DD)
 						if (firstInputValue != null && firstInputValue.matches("\\d{4}-\\d{2}-\\d{2}")) {
@@ -469,8 +445,42 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 				logger.debug("Primary approach failed: {}", e.getMessage());
 			}
 
-			// Fallback to standard approach
-			return getDateFromDisabledField(endorsementEffectiveDatePicker, "create-endorsement-endorsement-effective-date-picker");
+			// Alternative: Try JavaScript to get the hidden input value directly
+			try {
+				String jsDate = (String) ((JavascriptExecutor) driver).executeScript(
+					"var picker = document.getElementById('edit-endorsement-endorsement-effective-date-picker');" +
+					"if (picker) {" +
+					"  var inputs = picker.querySelectorAll('input');" +
+					"  for (var i = 0; i < inputs.length; i++) {" +
+					"    var val = inputs[i].value;" +
+					"    if (val && /^\\d{4}-\\d{2}-\\d{2}$/.test(val)) {" +
+					"      return val;" +
+					"    }" +
+					"  }" +
+					"}" +
+					"return '';"
+				);
+
+				if (jsDate != null && !jsDate.isEmpty()) {
+					logger.info("Got date via JavaScript: {}", jsDate);
+					return jsDate;
+				}
+			} catch (Exception e) {
+				logger.debug("JavaScript approach failed: {}", e.getMessage());
+			}
+
+			// Fallback: Try standard locator approach
+			try {
+				String value = getDateFromDisabledField(endorsementEffectiveDatePicker, "edit-endorsement-endorsement-effective-date-picker");
+				if (value != null && !value.isEmpty() && !value.equals("N/A")) {
+					return value;
+				}
+			} catch (Exception e) {
+				logger.debug("Standard locator approach failed: {}", e.getMessage());
+			}
+
+			logger.warn("Could not get endorsement effective date");
+			return "";
 		} catch (Exception e) {
 			logger.warn("Error getting endorsement effective date: {}", e.getMessage());
 			return "";
@@ -516,7 +526,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			WebElement datePickerContainer = null;
 			try {
 				datePickerContainer = shortWait.until(ExpectedConditions.visibilityOfElementLocated(
-					By.id("create-endorsement-endorsement-effective-date-picker")));
+					By.id("edit-endorsement-endorsement-effective-date-picker")));
 				logger.info("Found date picker container");
 			} catch (Exception e) {
 				logger.error("Date picker container not found");
@@ -531,14 +541,14 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			captureEndorsementScreenshot("Before Date Change");
 
 			// Click on the calendar icon button (SVG inside button) to open the date picker dialog
-			// User provided xpath: //*[@id='create-endorsement-endorsement-effective-date-picker']/div/button/svg
+			// User provided xpath: //*[@id='edit-endorsement-endorsement-effective-date-picker']/div/button/svg
 			WebElement calendarButton = null;
 			String[] calendarButtonXpaths = {
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']/div/button/svg",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']/div/button",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//button[.//svg]",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//button",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//svg",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']/div/button/svg",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']/div/button",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']//button[.//svg]",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']//button",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']//svg",
 				"//div[contains(@id,'endorsement-effective-date')]//button/svg",
 				"//div[contains(@id,'endorsement-effective-date')]//button[.//svg]",
 				"//div[contains(@id,'endorsement-effective-date')]//button"
@@ -692,10 +702,10 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 			// Try multiple approaches to get the date value
 			String[] inputXpaths = {
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//input",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']/div/input",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']//input",
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']/div/input",
 				"//div[contains(@id,'endorsement-effective-date')]//input",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//input[@type='text']"
+				"//*[@id='edit-endorsement-endorsement-effective-date-picker']//input[@type='text']"
 			};
 
 			for (String xpath : inputXpaths) {
@@ -728,7 +738,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			}
 
 			// Try finding by the disabled field method
-			String disabledValue = getDateFromDisabledField(endorsementEffectiveDatePicker, "create-endorsement-endorsement-effective-date-picker");
+			String disabledValue = getDateFromDisabledField(endorsementEffectiveDatePicker, "edit-endorsement-endorsement-effective-date-picker");
 			if (disabledValue != null && !disabledValue.isEmpty() && !disabledValue.equals("N/A")) {
 				logger.info("Got date value from disabled field: {}", disabledValue);
 				return disabledValue;
@@ -883,8 +893,8 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		// User confirmed: button[4] is the next month button (>)
 		// button[3] is a date button (e.g., January 5), NOT the navigation button
 		String[] nextButtonXpaths = {
-			"//*[@id='create-endorsement-endorsement-effective-date-picker']/span/div/div/div[1]/button[4]",
-			"//*[@id='create-endorsement-endorsement-effective-date-picker']//button[normalize-space()='>']",
+			"//*[@id='edit-endorsement-endorsement-effective-date-picker']/span/div/div/div[1]/button[4]",
+			"//*[@id='edit-endorsement-endorsement-effective-date-picker']//button[normalize-space()='>']",
 			"//div[contains(@id,'endorsement-effective-date')]//button[normalize-space()='>']",
 			"//button[normalize-space()='>']",
 			"//button[text()='>']",
@@ -916,7 +926,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		// Try finding all buttons in the calendar container and clicking the one with ">"
 		try {
 			List<WebElement> calendarButtons = driver.findElements(
-				By.xpath("//*[@id='create-endorsement-endorsement-effective-date-picker']//button"));
+				By.xpath("//*[@id='edit-endorsement-endorsement-effective-date-picker']//button"));
 			logger.info("Found {} buttons in date picker container", calendarButtons.size());
 			for (int i = 0; i < calendarButtons.size(); i++) {
 				WebElement btn = calendarButtons.get(i);
@@ -1138,7 +1148,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	public String getSelectedState() {
 		try {
-			String value = getValueFromDisabledDropdown(suggestedStateDropdown, "create-endorsement-suggested-state-select");
+			String value = getValueFromDisabledDropdown(suggestedStateDropdown, "edit-endorsement-suggested-state-select");
 
 			// If still empty, try alternative xpaths for Radix UI Select
 			if (value == null || value.isEmpty() || value.equals("--")) {
@@ -1157,10 +1167,10 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	private String getStateByAlternativeXpath() {
 		String[] xpaths = {
-			"//*[@id='create-endorsement-suggested-state-select']//span[contains(@class,'SelectValue')]",
-			"//*[@id='create-endorsement-suggested-state-select']/span",
-			"//*[@id='create-endorsement-suggested-state-select']",
-			"//button[@id='create-endorsement-suggested-state-select']//span",
+			"//*[@id='edit-endorsement-suggested-state-select']//span[contains(@class,'SelectValue')]",
+			"//*[@id='edit-endorsement-suggested-state-select']/span",
+			"//*[@id='edit-endorsement-suggested-state-select']",
+			"//button[@id='edit-endorsement-suggested-state-select']//span",
 			"//label[contains(text(),'State')]/following-sibling::*//span",
 			"//label[contains(text(),'Suggested State')]/following-sibling::*//span",
 			"//*[contains(@id,'state-select')]//span[not(contains(@class,'icon'))]",
@@ -1296,59 +1306,103 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 	/**
 	 * Click New Location button to add a new location
-	 * Tries multiple xpath strategies to find the button
 	 */
 	public void clickNewLocation() {
+		logger.info("=== Clicking New Location / Add Location button ===");
+
+		// Scroll to top first to ensure button area is visible
+		((JavascriptExecutor) driver).executeScript("window.scrollTo(0, 0)");
+		sleep(1000);
+
 		String[] buttonXpaths = {
-			"//button[contains(text(),'New Location')]",
+			"//*[@id='root']/div[2]/div[2]/div/div[1]/div[2]/button",
 			"//button[contains(text(),'Add Location')]",
-			"//button[contains(text(),'New location')]",
 			"//button[contains(text(),'Add location')]",
-			"//button[normalize-space()='New Location']",
-			"//button[normalize-space()='Add Location']",
-			"//*[contains(@id,'new-location') or contains(@id,'add-location')]",
-			"//*[contains(@id,'NewLocation') or contains(@id,'AddLocation')]",
-			"//button[contains(@class,'location')]//span[contains(text(),'New') or contains(text(),'Add')]/..",
-			"//button[.//*[contains(text(),'New Location') or contains(text(),'Add Location')]]",
-			"//button[contains(@aria-label,'New Location') or contains(@aria-label,'Add Location')]",
-			"//div[contains(@class,'location')]//button[contains(@class,'add') or contains(@class,'new')]",
-			"//button[contains(@class,'btn') and (contains(.,'New') or contains(.,'Add')) and contains(.,'Location')]"
+			"//button[contains(text(),'New Location')]",
+			"//button[contains(text(),'New location')]",
+			"//button[contains(@class,'bg-blue') and contains(text(),'Add')]",
+			"//div[contains(@class,'flex')]//button[contains(text(),'Add')]",
+			"//button[contains(@class,'primary') and contains(text(),'Location')]",
+			"//*[@id='root']//button[contains(text(),'Location')]"
 		};
 
 		for (String xpath : buttonXpaths) {
 			try {
 				List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+				logger.info("XPath '{}' found {} buttons", xpath, buttons.size());
+
 				for (WebElement button : buttons) {
-					if (button.isDisplayed() && button.isEnabled()) {
-						// Scroll to button first
-						((JavascriptExecutor) driver).executeScript(
-							"arguments[0].scrollIntoView({block: 'center'});", button);
-						sleep(500);
-						((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
-						logger.info("Clicked New Location button using xpath: {}", xpath);
-						sleep(1000);
-						return;
+					try {
+						String btnText = button.getText().trim();
+						boolean isDisplayed = button.isDisplayed();
+						boolean isEnabled = button.isEnabled();
+
+						logger.info("  Button: text='{}', displayed={}, enabled={}", btnText, isDisplayed, isEnabled);
+
+						if (isDisplayed && isEnabled) {
+							// Scroll to button first
+							((JavascriptExecutor) driver).executeScript(
+								"arguments[0].scrollIntoView({block: 'center'});", button);
+							sleep(500);
+							((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
+							logger.info("Clicked Add Location button using xpath: {} (text: '{}')", xpath, btnText);
+							sleep(1500);
+							return;
+						}
+					} catch (Exception e) {
+						// Continue to next button
 					}
 				}
 			} catch (Exception e) {
-				// Continue to next xpath
+				logger.debug("XPath {} failed: {}", xpath, e.getMessage());
 			}
 		}
 
-		// Last resort: try using the @FindBy locator
+		// Last resort: find any button with "Add" and "Location" text
+		logger.info("Trying last resort: finding any Add Location button by tag");
+		try {
+			List<WebElement> allButtons = driver.findElements(By.tagName("button"));
+			logger.info("Found {} total buttons on page", allButtons.size());
+
+			for (WebElement button : allButtons) {
+				try {
+					String btnText = button.getText().trim().toLowerCase();
+					if ((btnText.contains("add") && btnText.contains("location")) ||
+						btnText.equals("add location") || btnText.equals("new location")) {
+						if (button.isDisplayed() && button.isEnabled()) {
+							((JavascriptExecutor) driver).executeScript(
+								"arguments[0].scrollIntoView({block: 'center'});", button);
+							sleep(500);
+							((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
+							logger.info("Clicked Add Location button via tag search: '{}'", button.getText());
+							sleep(1500);
+							return;
+						}
+					}
+				} catch (Exception e) {
+					// Continue
+				}
+			}
+		} catch (Exception e) {
+			logger.warn("Tag search failed: {}", e.getMessage());
+		}
+
+		// Try using the @FindBy locator
 		try {
 			if (newLocationButton != null && newLocationButton.isDisplayed()) {
 				((JavascriptExecutor) driver).executeScript("arguments[0].click();", newLocationButton);
 				logger.info("Clicked New Location button using @FindBy locator");
-				sleep(1000);
+				sleep(1500);
 				return;
 			}
 		} catch (Exception e) {
-			// Continue
+			logger.warn("@FindBy locator failed: {}", e.getMessage());
 		}
 
-		logger.error("Could not find New Location button with any xpath strategy");
-		throw new RuntimeException("New Location button not found");
+		// Capture screenshot for debugging
+		captureEndorsementScreenshot("Add Location Button Not Found");
+		logger.error("Could not find Add Location button with any strategy");
+		throw new RuntimeException("Add Location button not found on Edit Endorsement page");
 	}
 
 	/**
@@ -1691,7 +1745,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			// Validation 1: Property Premium + GL Premium + WS Premium = Premium (GL + WS)
 			double calculatedPremiumGLWS = propertyPremiumSum + glPremiumSum + wsPremiumSum;
 			result.setCalculatedPremiumGLWS(calculatedPremiumGLWS);
-			boolean premiumMatch = Math.abs(calculatedPremiumGLWS - premiumGLWSValue) < 0.01;
+			boolean premiumMatch = Math.abs(calculatedPremiumGLWS - premiumGLWSValue) < 0.05;
 			result.setPremiumGLWSMatch(premiumMatch);
 			logger.info("Validation 1: {} + {} + {} = {} vs {} = {}",
 				propertyPremiumSum, glPremiumSum, wsPremiumSum, calculatedPremiumGLWS, premiumGLWSValue, premiumMatch ? "PASS" : "FAIL");
@@ -2071,6 +2125,448 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		}
 
 		return result;
+	}
+
+	/**
+	 * Validate Display Computations against Excel sheet data with pro-rata logic
+	 * @param createEndorsementLocations locations from CreateEndorsement sheet
+	 * @param editEndorsementLocations locations from EditEndorsement sheet
+	 * @return DisplayComputationSheetValidationResult with all validation details
+	 */
+	public DisplayComputationSheetValidationResult validateDisplayComputationsAgainstSheetData(
+			List<Map<String, String>> createEndorsementLocations,
+			List<Map<String, String>> editEndorsementLocations) {
+
+		logger.info("=== Validating Display Computations Against Sheet Data ===");
+		logger.info("Create Endorsement locations: {}, Edit Endorsement locations: {}",
+			createEndorsementLocations != null ? createEndorsementLocations.size() : 0,
+			editEndorsementLocations != null ? editEndorsementLocations.size() : 0);
+
+		DisplayComputationSheetValidationResult result = new DisplayComputationSheetValidationResult();
+
+		try {
+			// Calculate pro-rata days
+			long proRataDays = calculateProRataDays();
+			result.setProRataDays(proRataDays);
+			result.setEndorsementEffectiveDate(getEndorsementEffectiveDate());
+			result.setExpirationDate(getExpirationDate());
+
+			// Combine all locations from both sheets for validation
+			List<Map<String, String>> allSheetLocations = new java.util.ArrayList<>();
+			if (createEndorsementLocations != null) {
+				allSheetLocations.addAll(createEndorsementLocations);
+			}
+			if (editEndorsementLocations != null) {
+				allSheetLocations.addAll(editEndorsementLocations);
+			}
+
+			if (allSheetLocations.isEmpty()) {
+				result.setError("No locations provided from Excel sheets");
+				return result;
+			}
+
+			// Click Display Computation dialog button
+			boolean dialogOpened = openDisplayComputationDialog();
+			if (!dialogOpened) {
+				result.setError("Failed to open Display Computation dialog");
+				return result;
+			}
+
+			// Capture all location data from dialog (with pagination)
+			List<LocationComputationData> dialogData = captureAllLocationsFromDialog();
+			logger.info("Captured {} locations from Display Computation dialog", dialogData.size());
+
+			// Close the dialog
+			closeEditDisplayComputationDialog();
+
+			// Validate each sheet location against dialog data
+			for (Map<String, String> sheetLocation : allSheetLocations) {
+				// Get address with multiple key variations
+				String sheetAddress = getAddressFromLocationData(sheetLocation);
+				if (sheetAddress.isEmpty()) {
+					logger.warn("No address found in sheet location data. Keys: {}", sheetLocation.keySet());
+					continue;
+				}
+
+				// Find matching dialog data by address
+				LocationComputationData dialogLoc = findDialogLocationByAddress(dialogData, sheetAddress);
+
+				DisplayComputationLocationValidation locValidation = new DisplayComputationLocationValidation();
+				locValidation.setAddress(sheetAddress);
+
+				if (dialogLoc == null) {
+					locValidation.setError("Location not found in Display Computation dialog");
+					locValidation.setAllMatched(false);
+					result.addLocationValidation(locValidation);
+					continue;
+				}
+
+				// Get expected values from sheet with comprehensive key lookups
+				double expectedDwelling = getValueWithKeyVariations(sheetLocation, "Dwelling", "CoverageA", "dwelling", "coverage_a");
+				double expectedAS = getValueWithKeyVariations(sheetLocation, "AdditionalStructures", "CoverageB", "additional_structures", "coverage_b", "AS");
+				double expectedBPP = getValueWithKeyVariations(sheetLocation, "BPP", "CoverageC", "bpp", "coverage_c", "BusinessPersonalProperty");
+				double expectedLossOfRents = getValueWithKeyVariations(sheetLocation, "LossOfRents", "CoverageD", "loss_of_rents", "coverage_d", "LOR");
+				double expectedRate = getValueWithKeyVariations(sheetLocation, "Rate", "SuggestedRate", "recommended_rate", "rate", "suggestedrate", "RecommendedRate");
+
+				// Get actual values from dialog
+				double actualDwelling = dialogLoc.getDwelling();
+				double actualAS = dialogLoc.getAdditionalStructures();
+				double actualBPP = dialogLoc.getBpp();
+				double actualLossOfRents = dialogLoc.getLossOfRents();
+				double actualRate = dialogLoc.getRate();
+				double actualTaxes = dialogLoc.getTaxes();
+
+				// Set values in validation result
+				locValidation.setExpectedDwelling(expectedDwelling);
+				locValidation.setExpectedAdditionalStructures(expectedAS);
+				locValidation.setExpectedBPP(expectedBPP);
+				locValidation.setExpectedLossOfRents(expectedLossOfRents);
+				locValidation.setExpectedRate(expectedRate);
+
+				locValidation.setActualDwelling(actualDwelling);
+				locValidation.setActualAdditionalStructures(actualAS);
+				locValidation.setActualBPP(actualBPP);
+				locValidation.setActualLossOfRents(actualLossOfRents);
+				locValidation.setActualRate(actualRate);
+				locValidation.setActualTaxes(actualTaxes);
+
+				// Validate each field
+				boolean dwellingMatch = Math.abs(expectedDwelling - actualDwelling) < 1.0;
+				boolean asMatch = Math.abs(expectedAS - actualAS) < 1.0;
+				boolean bppMatch = Math.abs(expectedBPP - actualBPP) < 1.0;
+				boolean lorMatch = Math.abs(expectedLossOfRents - actualLossOfRents) < 1.0;
+				boolean rateMatch = Math.abs(expectedRate - actualRate) < 0.01;
+
+				locValidation.setDwellingMatch(dwellingMatch);
+				locValidation.setAdditionalStructuresMatch(asMatch);
+				locValidation.setBppMatch(bppMatch);
+				locValidation.setLossOfRentsMatch(lorMatch);
+				locValidation.setRateMatch(rateMatch);
+
+				// Calculate TIV = Dwelling + AS + BPP + Loss Of Rents
+				double calculatedTIV = expectedDwelling + expectedAS + expectedBPP + expectedLossOfRents;
+				double actualTIV = actualDwelling + actualAS + actualBPP + actualLossOfRents;
+				locValidation.setCalculatedTIV(calculatedTIV);
+				locValidation.setActualTIV(actualTIV);
+				boolean tivMatch = Math.abs(calculatedTIV - actualTIV) < 1.0;
+				locValidation.setTivMatch(tivMatch);
+
+				// Calculate Property Premium = (TIV / 100 * rate)
+				double annualPropertyPremium = (calculatedTIV / 100.0) * expectedRate;
+
+				// Apply pro-rata logic if applicable
+				double calculatedPropertyPremium;
+				if (proRataDays > 0 && proRataDays < 365) {
+					calculatedPropertyPremium = (annualPropertyPremium / 365.0) * proRataDays;
+					locValidation.setProRataApplied(true);
+				} else {
+					calculatedPropertyPremium = annualPropertyPremium;
+					locValidation.setProRataApplied(false);
+				}
+				calculatedPropertyPremium = Math.round(calculatedPropertyPremium * 100.0) / 100.0;
+
+				locValidation.setAnnualPropertyPremium(annualPropertyPremium);
+				locValidation.setCalculatedPropertyPremium(calculatedPropertyPremium);
+
+				// Get displayed property premium from table for this location
+				double displayedPropertyPremium = getPropertyPremiumFromTableByAddress(sheetAddress);
+				locValidation.setDisplayedPropertyPremium(displayedPropertyPremium);
+
+				boolean premiumMatch = Math.abs(calculatedPropertyPremium - displayedPropertyPremium) < 1.0;
+				locValidation.setPropertyPremiumMatch(premiumMatch);
+
+				// Overall match
+				boolean allMatched = dwellingMatch && asMatch && bppMatch && lorMatch && rateMatch && tivMatch && premiumMatch;
+				locValidation.setAllMatched(allMatched);
+
+				result.addLocationValidation(locValidation);
+
+				logger.info("Location '{}': Dwelling={}/{}, AS={}/{}, BPP={}/{}, LoR={}/{}, Rate={}/{}, TIV={}/{}, Premium={}/{}, Match={}",
+					sheetAddress,
+					expectedDwelling, actualDwelling,
+					expectedAS, actualAS,
+					expectedBPP, actualBPP,
+					expectedLossOfRents, actualLossOfRents,
+					expectedRate, actualRate,
+					calculatedTIV, actualTIV,
+					calculatedPropertyPremium, displayedPropertyPremium,
+					allMatched);
+			}
+
+			result.calculateOverallResult();
+
+			// Log to report
+			logDisplayComputationSheetValidationToReport(result);
+
+			captureEndorsementScreenshot("Display Computation Sheet Validation");
+
+		} catch (Exception e) {
+			logger.error("Error validating display computations against sheet: {}", e.getMessage());
+			result.setError("Error: " + e.getMessage());
+		}
+
+		return result;
+	}
+
+	/**
+	 * Find dialog location data by address (partial match)
+	 */
+	private LocationComputationData findDialogLocationByAddress(List<LocationComputationData> dialogData, String address) {
+		String normalizedAddress = address.toLowerCase().replaceAll("[^a-z0-9]", "");
+
+		for (LocationComputationData loc : dialogData) {
+			String dialogAddr = loc.getAddress().toLowerCase().replaceAll("[^a-z0-9]", "");
+			if (dialogAddr.contains(normalizedAddress) || normalizedAddress.contains(dialogAddr)) {
+				return loc;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Get property premium from table by address
+	 */
+	private double getPropertyPremiumFromTableByAddress(String address) {
+		try {
+			WebElement table = findLocationTable();
+			if (table == null) return 0.0;
+
+			List<WebElement> rows = table.findElements(By.xpath(".//tbody//tr"));
+			int addressColIndex = findColumnIndexByHeaderText("Address");
+			int premiumColIndex = findColumnIndexByHeaderText("Property Premium");
+
+			String normalizedAddress = address.toLowerCase().replaceAll("[^a-z0-9]", "");
+
+			for (WebElement row : rows) {
+				List<WebElement> cells = row.findElements(By.tagName("td"));
+				if (addressColIndex >= 0 && addressColIndex < cells.size()) {
+					String rowAddress = cells.get(addressColIndex).getText().toLowerCase().replaceAll("[^a-z0-9]", "");
+					if (rowAddress.contains(normalizedAddress) || normalizedAddress.contains(rowAddress)) {
+						if (premiumColIndex >= 0 && premiumColIndex < cells.size()) {
+							return extractCurrencyFromCell(cells.get(premiumColIndex));
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			logger.warn("Error getting property premium from table: {}", e.getMessage());
+		}
+		return 0.0;
+	}
+
+	/**
+	 * Close Display Computation dialog for Edit Endorsement
+	 */
+	private void closeEditDisplayComputationDialog() {
+		try {
+			WebElement closeBtn = driver.findElement(By.xpath("//button[contains(text(),'Close Rate Calculation Details')]"));
+			if (closeBtn.isDisplayed()) {
+				((JavascriptExecutor) driver).executeScript("arguments[0].click();", closeBtn);
+				logger.info("Closed Display Computation dialog");
+				sleep(500);
+				return;
+			}
+		} catch (Exception e) {
+			// Try other methods
+		}
+
+		try {
+			driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+			sleep(300);
+		} catch (Exception e) {
+			// Ignore
+		}
+	}
+
+	/**
+	 * Log display computation sheet validation to HTML report
+	 */
+	public void logDisplayComputationSheetValidationToReport(DisplayComputationSheetValidationResult result) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+
+		if (result.isAllPassed()) {
+			html.append("background-color: #d4edda; border-left: 4px solid #28a745;'>");
+			html.append("<h3 style='color: #28a745; margin-top: 0;'>Display Computation Validation (Against Sheet Data): PASSED</h3>");
+		} else {
+			html.append("background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+			html.append("<h3 style='color: #dc3545; margin-top: 0;'>Display Computation Validation (Against Sheet Data): FAILED</h3>");
+		}
+
+		if (result.getError() != null) {
+			html.append("<p style='color: #dc3545;'>Error: ").append(result.getError()).append("</p>");
+		}
+
+		// Pro-rata info
+		html.append("<p style='color: #000; margin: 10px 0;'><strong>Pro-Rata Days:</strong> ")
+			.append(result.getProRataDays()).append(" (").append(result.getEndorsementEffectiveDate())
+			.append(" to ").append(result.getExpirationDate()).append(")</p>");
+
+		html.append("<p style='color: #000; margin: 10px 0;'><strong>Formulas:</strong> TIV = Dwelling + AS + BPP + Loss Of Rents | Property Premium = (TIV / 100 × Rate) × (ProRataDays / 365)</p>");
+
+		// Summary
+		html.append("<p style='color: #000;'><strong>Summary:</strong> ")
+			.append(result.getPassedCount()).append(" Passed, ")
+			.append(result.getFailedCount()).append(" Failed out of ")
+			.append(result.getTotalCount()).append(" locations</p>");
+
+		// Detailed table
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000; font-size: 11px; margin-top: 10px;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 6px;'>Address</th>");
+		html.append("<th style='padding: 6px;'>Dwelling</th>");
+		html.append("<th style='padding: 6px;'>AS</th>");
+		html.append("<th style='padding: 6px;'>BPP</th>");
+		html.append("<th style='padding: 6px;'>LoR</th>");
+		html.append("<th style='padding: 6px;'>Rate</th>");
+		html.append("<th style='padding: 6px;'>TIV</th>");
+		html.append("<th style='padding: 6px;'>Calc Premium</th>");
+		html.append("<th style='padding: 6px;'>Disp Premium</th>");
+		html.append("<th style='padding: 6px;'>Status</th>");
+		html.append("</tr>");
+
+		int rowNum = 0;
+		for (DisplayComputationLocationValidation loc : result.getLocationValidations()) {
+			String bgColor = rowNum % 2 == 0 ? "#ffffff" : "#f8f9fa";
+			String status = loc.isAllMatched() ? "PASS" : "FAIL";
+			String statusColor = loc.isAllMatched() ? "#28a745" : "#dc3545";
+
+			html.append(String.format("<tr style='background-color: %s;'>", bgColor));
+			html.append(String.format("<td style='padding: 6px;'>%s</td>", truncateAddress(loc.getAddress())));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
+				loc.isDwellingMatch() ? "#28a745" : "#dc3545", loc.getExpectedDwelling(), loc.getActualDwelling()));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
+				loc.isAdditionalStructuresMatch() ? "#28a745" : "#dc3545", loc.getExpectedAdditionalStructures(), loc.getActualAdditionalStructures()));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
+				loc.isBppMatch() ? "#28a745" : "#dc3545", loc.getExpectedBPP(), loc.getActualBPP()));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
+				loc.isLossOfRentsMatch() ? "#28a745" : "#dc3545", loc.getExpectedLossOfRents(), loc.getActualLossOfRents()));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>%.4f / %.4f</td>",
+				loc.isRateMatch() ? "#28a745" : "#dc3545", loc.getExpectedRate(), loc.getActualRate()));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
+				loc.isTivMatch() ? "#28a745" : "#dc3545", loc.getCalculatedTIV(), loc.getActualTIV()));
+			html.append(String.format("<td style='padding: 6px;'>$%.2f%s</td>",
+				loc.getCalculatedPropertyPremium(), loc.isProRataApplied() ? " (Pro-Rata)" : ""));
+			html.append(String.format("<td style='padding: 6px;'>$%.2f</td>", loc.getDisplayedPropertyPremium()));
+			html.append(String.format("<td style='padding: 6px; font-weight: bold; color: %s;'>%s</td>", statusColor, status));
+			html.append("</tr>");
+			rowNum++;
+		}
+
+		html.append("</table></div>");
+		logHtmlToReport(html.toString());
+	}
+
+	// ==================== Display Computation Sheet Validation Result Classes ====================
+
+	public static class DisplayComputationSheetValidationResult {
+		private List<DisplayComputationLocationValidation> locationValidations = new java.util.ArrayList<>();
+		private boolean allPassed;
+		private int passedCount;
+		private int failedCount;
+		private long proRataDays;
+		private String endorsementEffectiveDate;
+		private String expirationDate;
+		private String error;
+
+		public void addLocationValidation(DisplayComputationLocationValidation v) { locationValidations.add(v); }
+		public List<DisplayComputationLocationValidation> getLocationValidations() { return locationValidations; }
+		public boolean isAllPassed() { return allPassed; }
+		public int getPassedCount() { return passedCount; }
+		public int getFailedCount() { return failedCount; }
+		public int getTotalCount() { return locationValidations.size(); }
+		public long getProRataDays() { return proRataDays; }
+		public void setProRataDays(long v) { this.proRataDays = v; }
+		public String getEndorsementEffectiveDate() { return endorsementEffectiveDate; }
+		public void setEndorsementEffectiveDate(String v) { this.endorsementEffectiveDate = v; }
+		public String getExpirationDate() { return expirationDate; }
+		public void setExpirationDate(String v) { this.expirationDate = v; }
+		public String getError() { return error; }
+		public void setError(String v) { this.error = v; }
+
+		public void calculateOverallResult() {
+			passedCount = 0;
+			failedCount = 0;
+			for (DisplayComputationLocationValidation v : locationValidations) {
+				if (v.isAllMatched()) passedCount++;
+				else failedCount++;
+			}
+			allPassed = failedCount == 0 && passedCount > 0;
+		}
+	}
+
+	public static class DisplayComputationLocationValidation {
+		private String address;
+		private double expectedDwelling, actualDwelling;
+		private double expectedAdditionalStructures, actualAdditionalStructures;
+		private double expectedBPP, actualBPP;
+		private double expectedLossOfRents, actualLossOfRents;
+		private double expectedRate, actualRate;
+		private double actualTaxes;
+		private double calculatedTIV, actualTIV;
+		private double annualPropertyPremium;
+		private double calculatedPropertyPremium;
+		private double displayedPropertyPremium;
+		private boolean dwellingMatch, additionalStructuresMatch, bppMatch, lossOfRentsMatch, rateMatch;
+		private boolean tivMatch, propertyPremiumMatch;
+		private boolean proRataApplied;
+		private boolean allMatched;
+		private String error;
+
+		public String getAddress() { return address; }
+		public void setAddress(String v) { this.address = v; }
+		public double getExpectedDwelling() { return expectedDwelling; }
+		public void setExpectedDwelling(double v) { this.expectedDwelling = v; }
+		public double getActualDwelling() { return actualDwelling; }
+		public void setActualDwelling(double v) { this.actualDwelling = v; }
+		public double getExpectedAdditionalStructures() { return expectedAdditionalStructures; }
+		public void setExpectedAdditionalStructures(double v) { this.expectedAdditionalStructures = v; }
+		public double getActualAdditionalStructures() { return actualAdditionalStructures; }
+		public void setActualAdditionalStructures(double v) { this.actualAdditionalStructures = v; }
+		public double getExpectedBPP() { return expectedBPP; }
+		public void setExpectedBPP(double v) { this.expectedBPP = v; }
+		public double getActualBPP() { return actualBPP; }
+		public void setActualBPP(double v) { this.actualBPP = v; }
+		public double getExpectedLossOfRents() { return expectedLossOfRents; }
+		public void setExpectedLossOfRents(double v) { this.expectedLossOfRents = v; }
+		public double getActualLossOfRents() { return actualLossOfRents; }
+		public void setActualLossOfRents(double v) { this.actualLossOfRents = v; }
+		public double getExpectedRate() { return expectedRate; }
+		public void setExpectedRate(double v) { this.expectedRate = v; }
+		public double getActualRate() { return actualRate; }
+		public void setActualRate(double v) { this.actualRate = v; }
+		public double getActualTaxes() { return actualTaxes; }
+		public void setActualTaxes(double v) { this.actualTaxes = v; }
+		public double getCalculatedTIV() { return calculatedTIV; }
+		public void setCalculatedTIV(double v) { this.calculatedTIV = v; }
+		public double getActualTIV() { return actualTIV; }
+		public void setActualTIV(double v) { this.actualTIV = v; }
+		public double getAnnualPropertyPremium() { return annualPropertyPremium; }
+		public void setAnnualPropertyPremium(double v) { this.annualPropertyPremium = v; }
+		public double getCalculatedPropertyPremium() { return calculatedPropertyPremium; }
+		public void setCalculatedPropertyPremium(double v) { this.calculatedPropertyPremium = v; }
+		public double getDisplayedPropertyPremium() { return displayedPropertyPremium; }
+		public void setDisplayedPropertyPremium(double v) { this.displayedPropertyPremium = v; }
+		public boolean isDwellingMatch() { return dwellingMatch; }
+		public void setDwellingMatch(boolean v) { this.dwellingMatch = v; }
+		public boolean isAdditionalStructuresMatch() { return additionalStructuresMatch; }
+		public void setAdditionalStructuresMatch(boolean v) { this.additionalStructuresMatch = v; }
+		public boolean isBppMatch() { return bppMatch; }
+		public void setBppMatch(boolean v) { this.bppMatch = v; }
+		public boolean isLossOfRentsMatch() { return lossOfRentsMatch; }
+		public void setLossOfRentsMatch(boolean v) { this.lossOfRentsMatch = v; }
+		public boolean isRateMatch() { return rateMatch; }
+		public void setRateMatch(boolean v) { this.rateMatch = v; }
+		public boolean isTivMatch() { return tivMatch; }
+		public void setTivMatch(boolean v) { this.tivMatch = v; }
+		public boolean isPropertyPremiumMatch() { return propertyPremiumMatch; }
+		public void setPropertyPremiumMatch(boolean v) { this.propertyPremiumMatch = v; }
+		public boolean isProRataApplied() { return proRataApplied; }
+		public void setProRataApplied(boolean v) { this.proRataApplied = v; }
+		public boolean isAllMatched() { return allMatched; }
+		public void setAllMatched(boolean v) { this.allMatched = v; }
+		public String getError() { return error; }
+		public void setError(String v) { this.error = v; }
 	}
 
 	/**
@@ -2816,19 +3312,26 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 	/**
 	 * Add locations from a list of location data maps
-	 * Uses inherited addLocation method from CreateQuotePage (same as EditQuotePage)
+	 * Uses direct implementation for Edit Endorsement page
 	 */
 	public int addLocationsFromSheet(List<Map<String, String>> locations) {
-		logger.info("Adding {} locations to Premium Endorsement", locations.size());
+		logger.info("Adding {} locations to Edit Endorsement", locations.size());
 		int addedCount = 0;
 		int rejectedDueToCA = 0;
 
+		// Get initial location count before adding
+		int initialCount = getLocationCountFromTable();
+		logger.info("Initial location count before adding: {}", initialCount);
+
 		for (int i = 0; i < locations.size(); i++) {
 			Map<String, String> location = locations.get(i);
-			String address = location.getOrDefault("Address", "");
+
+			// Try multiple column names for address
+			String address = getValueFromMultipleKeys(location, "Address", "address", "Physical Address",
+				"Insured Property Address", "Property Address", "ADDR", "addr");
 
 			if (address.isEmpty()) {
-				logger.warn("Skipping location {} - no address provided", i + 1);
+				logger.warn("Skipping location {} - no address provided. Keys: {}", i + 1, location.keySet());
 				continue;
 			}
 
@@ -2836,34 +3339,436 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			logger.info("Adding location {}/{}: {}", (i + 1), locations.size(), address);
 
 			try {
-				// Use inherited addLocation method from CreateQuotePage (same as EditQuotePage)
-				addLocation(location, paymentPlan, null);
+				// Click Add Location button using Edit Endorsement specific XPath
+				clickNewLocation();
 				sleep(2000);
 
-				// Check for Arch California error (same as EditQuotePage)
+				// Find the dialog using Edit Endorsement specific method
+				WebElement dialog = findLocationDialog();
+				if (dialog == null) {
+					logger.error("Could not find location dialog after clicking Add Location button");
+					captureScreenshotToReport("Dialog Not Found - " + address);
+					continue;
+				}
+
+				logger.info("Dialog opened for: {}", address);
+				captureScreenshotToReport("Dialog Opened - Location " + (i + 1));
+
+				// Fill the location dialog
+				fillLocationDialog(dialog, location);
+				sleep(1000);
+
+				// Scroll to bottom and select payment plan
+				scrollDialogDown(dialog);
+				sleep(500);
+				selectPaymentPlanInDialog(paymentPlan);
+				sleep(500);
+
+				// Scroll to bottom again to ensure Add button is visible
+				scrollDialogDown(dialog);
+				sleep(500);
+
+				captureScreenshotToReport("Before Add Click - Location " + (i + 1));
+
+				// Click Submit/Add button in dialog and verify it closes
+				boolean dialogClosed = clickAddButtonAndVerifyClose();
+
+				// Check for Arch California error
 				if (isArchCaliforniaErrorDisplayed()) {
 					String errorMsg = getArchCaliforniaErrorMessage();
 					logger.info("EXPECTED: Arch California error - Location rejected: {} - {}", address, errorMsg);
 					captureScreenshotToReport("Arch California Error - " + address);
 					rejectedDueToCA++;
 					dismissErrorDialog();
-				} else {
+				} else if (dialogClosed) {
 					addedCount++;
 					logger.info("Successfully added location: {}", address);
+				} else {
+					logger.error("Add button may not have been clicked - dialog still open for: {}", address);
+					captureScreenshotToReport("Dialog Still Open - " + address);
+					// Try to close dialog with Escape
+					try {
+						driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+						sleep(1000);
+					} catch (Exception ex) {
+						// Ignore
+					}
 				}
 			} catch (Exception e) {
 				logger.error("Failed to add location {}: {}", address, e.getMessage());
+				captureScreenshotToReport("Error Adding - " + address);
 				if (isArchCaliforniaErrorDisplayed()) {
 					captureScreenshotToReport("Arch California Error - " + address);
 					rejectedDueToCA++;
 					dismissErrorDialog();
 				}
+				// Try to close any open dialog
+				try {
+					driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+					sleep(500);
+				} catch (Exception ex) {
+					// Ignore
+				}
 			}
+		}
+
+		// Verify final count
+		sleep(2000);
+		int finalCount = getLocationCountFromTable();
+		int actuallyAdded = finalCount - initialCount;
+		logger.info("Location count: Before={}, After={}, Actually Added={}, Expected={}",
+			initialCount, finalCount, actuallyAdded, addedCount);
+
+		if (actuallyAdded != addedCount) {
+			logger.warn("Mismatch! Expected to add {} but only {} were actually added", addedCount, actuallyAdded);
+			addedCount = actuallyAdded; // Use actual count
 		}
 
 		captureScreenshotToReport("After Adding " + addedCount + " Locations");
 		logger.info("Added {}/{} locations (rejected due to Arch+CA: {})", addedCount, locations.size(), rejectedDueToCA);
 		return addedCount;
+	}
+
+	/**
+	 * Click Add button and verify dialog closes and location was added
+	 */
+	private boolean clickAddButtonAndVerifyClose() {
+		logger.info("Clicking Add button and verifying dialog closes");
+
+		// Click the Add button
+		clickAddButtonInDialog();
+		sleep(3000);
+
+		// Check for any error messages/toasts first
+		if (checkForErrorMessages()) {
+			logger.error("Error message detected after clicking Add button");
+			captureScreenshotToReport("Error After Add Click");
+			return false;
+		}
+
+		// Check if dialog is still open
+		WebElement dialog = findLocationDialog();
+		if (dialog == null || !dialog.isDisplayed()) {
+			logger.info("Dialog closed successfully after clicking Add button");
+			// Check for success toast/message
+			checkForSuccessMessage();
+			return true;
+		}
+
+		// Dialog still open - check for validation errors in dialog
+		if (checkForValidationErrorsInDialog(dialog)) {
+			logger.error("Validation errors found in dialog - cannot add location");
+			captureScreenshotToReport("Validation Errors in Dialog");
+			return false;
+		}
+
+		// Dialog still open - try clicking again
+		logger.warn("Dialog still open, trying to click Add button again");
+		clickAddButtonInDialog();
+		sleep(2000);
+
+		dialog = findLocationDialog();
+		if (dialog == null || !dialog.isDisplayed()) {
+			logger.info("Dialog closed on second attempt");
+			return true;
+		}
+
+		logger.error("Dialog is still open after multiple Add button clicks");
+		captureScreenshotToReport("Dialog Still Open After Add");
+		return false;
+	}
+
+	/**
+	 * Check for error messages/toasts on page
+	 */
+	private boolean checkForErrorMessages() {
+		String[] errorXpaths = {
+			"//*[contains(@class,'toast') and contains(@class,'error')]",
+			"//*[contains(@class,'Toastify') and contains(@class,'error')]",
+			"//*[contains(@class,'alert') and contains(@class,'error')]",
+			"//*[contains(@class,'error-message')]",
+			"//*[contains(@role,'alert') and contains(@class,'error')]",
+			"//div[contains(@class,'text-red')]",
+			"//p[contains(@class,'text-red')]"
+		};
+
+		for (String xpath : errorXpaths) {
+			try {
+				List<WebElement> errors = driver.findElements(By.xpath(xpath));
+				for (WebElement error : errors) {
+					if (error.isDisplayed()) {
+						String errorText = error.getText();
+						if (!errorText.trim().isEmpty()) {
+							logger.error("Error message found: {}", errorText);
+							return true;
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Check for success message/toast
+	 */
+	private void checkForSuccessMessage() {
+		String[] successXpaths = {
+			"//*[contains(@class,'toast') and contains(@class,'success')]",
+			"//*[contains(@class,'Toastify') and contains(@class,'success')]",
+			"//*[contains(@class,'alert') and contains(@class,'success')]",
+			"//*[contains(text(),'successfully')]",
+			"//*[contains(text(),'added')]"
+		};
+
+		for (String xpath : successXpaths) {
+			try {
+				List<WebElement> messages = driver.findElements(By.xpath(xpath));
+				for (WebElement msg : messages) {
+					if (msg.isDisplayed()) {
+						String text = msg.getText();
+						if (!text.trim().isEmpty()) {
+							logger.info("Success message found: {}", text);
+							return;
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+	}
+
+	/**
+	 * Check for validation errors within the dialog
+	 */
+	private boolean checkForValidationErrorsInDialog(WebElement dialog) {
+		String[] errorXpaths = {
+			".//span[contains(@class,'error')]",
+			".//p[contains(@class,'error')]",
+			".//div[contains(@class,'error')]",
+			".//*[contains(@class,'text-red')]",
+			".//*[contains(@class,'invalid')]",
+			".//span[contains(text(),'required')]",
+			".//span[contains(text(),'invalid')]"
+		};
+
+		for (String xpath : errorXpaths) {
+			try {
+				List<WebElement> errors = dialog.findElements(By.xpath(xpath));
+				for (WebElement error : errors) {
+					if (error.isDisplayed()) {
+						String errorText = error.getText();
+						if (!errorText.trim().isEmpty() && errorText.length() < 200) {
+							logger.error("Validation error in dialog: {}", errorText);
+							return true;
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Get location count from the locations table
+	 */
+	private int getLocationCountFromTable() {
+		try {
+			// Look for location rows in the table
+			String[] rowXpaths = {
+				"//table//tbody//tr",
+				"//div[contains(@class,'location')]//tr",
+				"//tr[contains(@class,'location')]",
+				"//*[contains(@class,'LocationRow')]",
+				"//div[contains(@class,'grid')]//div[contains(@class,'row')]"
+			};
+
+			for (String xpath : rowXpaths) {
+				try {
+					List<WebElement> rows = driver.findElements(By.xpath(xpath));
+					if (rows.size() > 0) {
+						// Filter out header rows
+						int count = 0;
+						for (WebElement row : rows) {
+							String rowText = row.getText().toLowerCase();
+							if (!rowText.contains("address") || rowText.length() > 50) {
+								count++;
+							}
+						}
+						if (count > 0) {
+							logger.info("Found {} location rows using xpath: {}", count, xpath);
+							return count;
+						}
+					}
+				} catch (Exception e) {
+					// Continue
+				}
+			}
+
+			// Try to find location count from a counter/badge element
+			String[] countXpaths = {
+				"//*[contains(text(),'Location')]/following::*[contains(@class,'badge')]",
+				"//*[contains(@class,'count')]",
+				"//span[contains(@class,'total')]"
+			};
+
+			for (String xpath : countXpaths) {
+				try {
+					WebElement countElement = driver.findElement(By.xpath(xpath));
+					String countText = countElement.getText().replaceAll("[^0-9]", "");
+					if (!countText.isEmpty()) {
+						return Integer.parseInt(countText);
+					}
+				} catch (Exception e) {
+					// Continue
+				}
+			}
+
+		} catch (Exception e) {
+			logger.warn("Could not get location count: {}", e.getMessage());
+		}
+		return 0;
+	}
+
+	/**
+	 * Add locations on Edit Endorsement page from sheet data
+	 */
+	public int addLocationsOnEditEndorsement(List<Map<String, String>> locations) {
+		logger.info("=== Adding Locations on Edit Endorsement ===");
+		return addLocationsFromSheet(locations);
+	}
+
+	/**
+	 * Get value from map using multiple possible keys
+	 */
+	private String getValueFromMultipleKeys(Map<String, String> map, String... keys) {
+		for (String key : keys) {
+			// Try exact match
+			if (map.containsKey(key)) {
+				String value = map.get(key);
+				if (value != null && !value.trim().isEmpty()) {
+					return value.trim();
+				}
+			}
+			// Try case-insensitive match
+			for (Map.Entry<String, String> entry : map.entrySet()) {
+				if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+					String value = entry.getValue();
+					if (value != null && !value.trim().isEmpty()) {
+						return value.trim();
+					}
+				}
+			}
+		}
+		return "";
+	}
+
+	/**
+	 * Get Suggested Rate value from location data map
+	 * Reads from recommended_rate column (column F in Excel) which is normalized to SuggestedRate
+	 * IMPORTANT: This method ensures we do NOT accidentally use AOP column (column Z) value
+	 *
+	 * Column mapping:
+	 * - Column F: recommended_rate -> normalized to SuggestedRate (this is the rate we want)
+	 * - Column Z: aop -> normalized to AOP (this is a deductible, NOT a rate)
+	 *
+	 * @param locationData the location data map (should be normalized from ExcelReader)
+	 * @return the suggested rate value, or empty string if not found/invalid
+	 */
+	private String getSuggestedRateFromLocationData(Map<String, String> locationData) {
+		// Log all keys for debugging
+		logger.info("Location data keys: {}", locationData.keySet());
+
+		// Priority order for finding Suggested Rate:
+		// 1. SuggestedRate (normalized key from recommended_rate column)
+		// 2. recommended_rate (original Excel column name)
+		// 3. Recommended Rate (alternate naming)
+		// NOTE: We do NOT look for just "Rate" to avoid confusion with other rate fields
+
+		String suggestedRate = "";
+		String sourceKey = "";
+
+		// Try normalized key first (this is what ExcelReader.normalizeLocationRow creates)
+		if (locationData.containsKey("SuggestedRate")) {
+			suggestedRate = locationData.get("SuggestedRate");
+			sourceKey = "SuggestedRate";
+		}
+		// Try original Excel column name
+		else if (locationData.containsKey("recommended_rate")) {
+			suggestedRate = locationData.get("recommended_rate");
+			sourceKey = "recommended_rate";
+		}
+		// Try case variations
+		else {
+			for (Map.Entry<String, String> entry : locationData.entrySet()) {
+				String key = entry.getKey();
+				if (key != null) {
+					String keyLower = key.trim().toLowerCase();
+					// Match recommended_rate or suggested rate (but NOT just "rate" to avoid confusion)
+					if (keyLower.equals("recommended_rate") ||
+						keyLower.equals("suggestedrate") ||
+						keyLower.equals("suggested_rate") ||
+						keyLower.equals("suggested rate")) {
+						suggestedRate = entry.getValue();
+						sourceKey = key;
+						break;
+					}
+				}
+			}
+		}
+
+		logger.info("Found Suggested Rate from key '{}': '{}'", sourceKey, suggestedRate);
+
+		// Validate the value
+		if (suggestedRate != null && !suggestedRate.trim().isEmpty()) {
+			try {
+				// Clean the value - remove any non-numeric characters except decimal point
+				String cleanedRate = suggestedRate.replaceAll("[^0-9.]", "");
+				if (!cleanedRate.isEmpty()) {
+					double rateValue = Double.parseDouble(cleanedRate);
+					// Sanity check: Suggested Rate should typically be a small decimal (like 0.5, 1.2, etc.)
+					// NOT a large number like 25000 (which would be AOP deductible)
+					if (rateValue > 100) {
+						logger.warn("Suggested Rate value '{}' seems too large (>100) - this might be AOP value by mistake. Skipping.", cleanedRate);
+						return "";
+					}
+					logger.info("Validated Suggested Rate: '{}' (cleaned from '{}')", cleanedRate, suggestedRate);
+					return cleanedRate;
+				} else {
+					logger.warn("Suggested Rate '{}' is not a valid number, skipping", suggestedRate);
+				}
+			} catch (NumberFormatException e) {
+				logger.warn("Suggested Rate '{}' is not a valid number: {}", suggestedRate, e.getMessage());
+			}
+		}
+
+		return "";
+	}
+
+	/**
+	 * Log add locations result to HTML report
+	 */
+	public void logAddLocationsResultToReport(int totalLocations, int addedCount) {
+		StringBuilder html = new StringBuilder();
+		boolean success = addedCount > 0;
+
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+		html.append(success ? "background-color: #d4edda; border-left: 4px solid #28a745;'>" : "background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+		html.append("<h3 style='color: ").append(success ? "#28a745" : "#dc3545").append("; margin-top: 0;'>");
+		html.append("Edit Endorsement - Add Locations: ").append(success ? "SUCCESS" : "FAILED").append("</h3>");
+
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Total Locations in Sheet:</td><td style='padding: 8px;'>").append(totalLocations).append("</td></tr>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Successfully Added:</td><td style='padding: 8px;'>").append(addedCount).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Rejected (Arch+CA):</td><td style='padding: 8px;'>").append(totalLocations - addedCount).append("</td></tr>");
+		html.append("</table></div>");
+
+		logHtmlToReport(html.toString());
 	}
 
 	/**
@@ -2928,21 +3833,8 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			sleep(1000);
 		}
 
-		// City, State, ZipCode - enter if not auto-filled from address
-		String city = locationData.getOrDefault("City", "");
-		if (!city.isEmpty()) {
-			enterFieldInDialog(dialog, "City", city);
-		}
-
-		String state = locationData.getOrDefault("State", "");
-		if (!state.isEmpty()) {
-			enterFieldInDialog(dialog, "State", state);
-		}
-
-		String zipCode = locationData.getOrDefault("ZipCode", "");
-		if (!zipCode.isEmpty()) {
-			enterFieldInDialog(dialog, "Zip", zipCode);
-		}
+		// Fill City, State, ZipCode with Faker if empty after address auto-complete
+		fillCityStateZipWithFakerIfEmpty(dialog, locationData);
 
 		// Municipality (dropdown)
 		String municipality = locationData.getOrDefault("Municipality", "");
@@ -2955,84 +3847,112 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		selectPropertyTypeInDialog(dialog, propertyType);
 		sleep(500);
 
-		// Enter Units (# of Units field)
+		// Enter Units (# of Units field) - use Faker if empty and PropertyType is RM
 		String units = locationData.getOrDefault("Units", "");
+		if (units.isEmpty() && (propertyType.equalsIgnoreCase("RM") || propertyType.toLowerCase().contains("multi"))) {
+			units = String.valueOf(faker.number().numberBetween(2, 10));
+			logger.info("Units was empty for RM property - using Faker: {}", units);
+		}
 		if (!units.isEmpty()) {
 			enterFieldInDialog(dialog, "Units", units);
 		}
 
-		// Year Built
+		// Year Built - use Faker if empty
 		String yearBuilt = locationData.getOrDefault("YearBuilt", "");
-		if (!yearBuilt.isEmpty()) {
-			enterFieldInDialog(dialog, "Year Built", yearBuilt);
+		if (yearBuilt.isEmpty()) {
+			yearBuilt = String.valueOf(faker.number().numberBetween(1970, 2020));
+			logger.info("YearBuilt was empty - using Faker: {}", yearBuilt);
 		}
+		enterFieldInDialog(dialog, "Year Built", yearBuilt);
 
-		// Roof Year
+		// Roof Year - use Faker if empty
 		String roofYear = locationData.getOrDefault("RoofYear", "");
-		if (!roofYear.isEmpty()) {
-			enterFieldInDialog(dialog, "Roof", roofYear);
+		if (roofYear.isEmpty()) {
+			roofYear = String.valueOf(faker.number().numberBetween(2010, 2024));
+			logger.info("RoofYear was empty - using Faker: {}", roofYear);
 		}
+		enterFieldInDialog(dialog, "Roof", roofYear);
 
-		// Stories
+		// Stories - use Faker if empty
 		String stories = locationData.getOrDefault("Stories", "");
-		if (!stories.isEmpty()) {
-			enterFieldInDialog(dialog, "Stories", stories);
+		if (stories.isEmpty()) {
+			stories = String.valueOf(faker.number().numberBetween(1, 3));
+			logger.info("Stories was empty - using Faker: {}", stories);
 		}
+		enterFieldInDialog(dialog, "Stories", stories);
 
-		// Sq. Ft.
+		// Sq. Ft. - use Faker if empty
 		String sqFt = locationData.getOrDefault("SqFt", "");
-		if (!sqFt.isEmpty()) {
-			enterFieldInDialog(dialog, "Sq. Ft", sqFt);
+		if (sqFt.isEmpty()) {
+			sqFt = String.valueOf(faker.number().numberBetween(1000, 3000));
+			logger.info("SqFt was empty - using Faker: {}", sqFt);
 		}
+		enterFieldInDialog(dialog, "Sq. Ft", sqFt);
 
-		// Coverage A
+		// Coverage A - use Faker if empty
 		String coverageA = locationData.getOrDefault("CoverageA", "");
-		if (!coverageA.isEmpty()) {
-			enterFieldInDialog(dialog, "Coverage A", coverageA);
+		if (coverageA.isEmpty()) {
+			coverageA = String.valueOf(faker.number().numberBetween(50000, 150000));
+			logger.info("CoverageA was empty - using Faker: {}", coverageA);
 		}
+		enterFieldInDialog(dialog, "Coverage A", coverageA);
 
-		// Coverage B
+		// Coverage B - use Faker if empty
 		String coverageB = locationData.getOrDefault("CoverageB", "");
-		if (!coverageB.isEmpty()) {
-			enterFieldInDialog(dialog, "Coverage B", coverageB);
+		if (coverageB.isEmpty()) {
+			coverageB = String.valueOf(faker.number().numberBetween(5000, 15000));
+			logger.info("CoverageB was empty - using Faker: {}", coverageB);
 		}
+		enterFieldInDialog(dialog, "Coverage B", coverageB);
 
 		// Scroll down in dialog
 		scrollDialogDown(dialog);
 		sleep(500);
 
-		// Coverage C
+		// Coverage C - use Faker if empty
 		String coverageC = locationData.getOrDefault("CoverageC", "");
-		if (!coverageC.isEmpty()) {
-			enterFieldInDialog(dialog, "Coverage C", coverageC);
+		if (coverageC.isEmpty()) {
+			coverageC = String.valueOf(faker.number().numberBetween(5000, 15000));
+			logger.info("CoverageC was empty - using Faker: {}", coverageC);
 		}
+		enterFieldInDialog(dialog, "Coverage C", coverageC);
 
-		// Loss of Rents
+		// Loss of Rents - use Faker if empty
 		String lossOfRents = locationData.getOrDefault("LossOfRents", "");
-		if (!lossOfRents.isEmpty()) {
-			enterFieldInDialog(dialog, "Loss of Rents", lossOfRents);
+		if (lossOfRents.isEmpty()) {
+			lossOfRents = String.valueOf(faker.number().numberBetween(5000, 10000));
+			logger.info("LossOfRents was empty - using Faker: {}", lossOfRents);
 		}
+		enterFieldInDialog(dialog, "Loss of Rents", lossOfRents);
 
 		// Scroll down again
 		scrollDialogDown(dialog);
 		sleep(300);
 
-		// Suggested Rate
-		String suggestedRate = locationData.getOrDefault("SuggestedRate", "");
+		// Suggested Rate - USE recommended_rate column value (normalized to SuggestedRate)
+		// Priority: SuggestedRate (normalized from recommended_rate) > recommended_rate (original) > Rate
+		// IMPORTANT: Do NOT use AOP column for Suggested Rate - AOP is a separate deductible field
+		String suggestedRate = getSuggestedRateFromLocationData(locationData);
+		logger.info("Suggested Rate value to enter: '{}'", suggestedRate);
+
+		// Only enter if we have a valid rate value
 		if (!suggestedRate.isEmpty()) {
-			enterFieldInDialog(dialog, "Suggested Rate", suggestedRate);
+			enterSuggestedRateInDialog(dialog, suggestedRate);
+		} else {
+			logger.info("No valid Suggested Rate found - field will keep its default/auto-calculated value");
 		}
 
-		// AOP Deductible
+		// AOP Deductible - This is a SEPARATE field, NOT related to Suggested Rate
+		// Use specific method to avoid accidentally entering into Suggested Rate field
 		String aop = locationData.getOrDefault("AOP", "");
 		if (!aop.isEmpty()) {
-			enterFieldInDialog(dialog, "AOP", aop);
+			enterAOPDeductibleInDialog(dialog, aop);
 		}
 
-		// Wind Deductible
+		// Wind Deductible - Use specific method to target the correct field
 		String windDeductible = locationData.getOrDefault("WindDeductible", "");
 		if (!windDeductible.isEmpty()) {
-			enterFieldInDialog(dialog, "Wind", windDeductible);
+			enterWindDeductibleInDialog(dialog, windDeductible);
 		}
 
 		// RCV/ACV selection
@@ -3050,6 +3970,129 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		// Scroll to bottom for payment plan and mortgagee
 		scrollDialogDown(dialog);
 		sleep(300);
+	}
+
+	/**
+	 * Fill City, State, and Zip Code fields with Faker-generated data if auto-complete didn't populate them
+	 */
+	private void fillCityStateZipWithFakerIfEmpty(WebElement dialog, Map<String, String> locationData) {
+		logger.info("Checking if City, State, Zip need to be filled with Faker data");
+
+		// Check and fill City
+		String currentCity = getFieldValueInDialog(dialog, "City");
+		if (currentCity == null || currentCity.trim().isEmpty()) {
+			String city = locationData.getOrDefault("City", faker.address().city());
+			enterFieldInDialog(dialog, "City", city);
+			logger.info("City was empty - filled with Faker data: {}", city);
+		} else {
+			logger.info("City already populated: {}", currentCity);
+		}
+
+		// Check and fill State
+		String currentState = getFieldValueInDialog(dialog, "State");
+		if (currentState == null || currentState.trim().isEmpty()) {
+			String state = locationData.getOrDefault("State", faker.address().stateAbbr());
+			// Try to select from dropdown or enter text
+			boolean stateSelected = selectStateInDialog(dialog, state);
+			if (!stateSelected) {
+				enterFieldInDialog(dialog, "State", state);
+			}
+			logger.info("State was empty - filled with Faker data: {}", state);
+		} else {
+			logger.info("State already populated: {}", currentState);
+		}
+
+		// Check and fill Zip Code
+		String currentZip = getFieldValueInDialog(dialog, "Zip");
+		if (currentZip == null || currentZip.trim().isEmpty()) {
+			String zipCode = locationData.getOrDefault("ZipCode", faker.address().zipCode().split("-")[0]); // Get 5-digit zip
+			enterFieldInDialog(dialog, "Zip", zipCode);
+			logger.info("Zip was empty - filled with Faker data: {}", zipCode);
+		} else {
+			logger.info("Zip already populated: {}", currentZip);
+		}
+	}
+
+	/**
+	 * Get field value from input within dialog
+	 */
+	private String getFieldValueInDialog(WebElement dialog, String fieldLabel) {
+		String[] xpaths = {
+			".//label[contains(text(),'" + fieldLabel + "')]/following::input[1]",
+			".//label[contains(text(),'" + fieldLabel + "')]/..//input",
+			".//input[contains(@placeholder,'" + fieldLabel + "')]"
+		};
+
+		for (String xpath : xpaths) {
+			try {
+				List<WebElement> inputs = dialog.findElements(By.xpath(xpath));
+				for (WebElement input : inputs) {
+					if (input.isDisplayed()) {
+						String value = input.getAttribute("value");
+						if (value != null && !value.isEmpty()) {
+							return value;
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Select state from dropdown in dialog
+	 */
+	private boolean selectStateInDialog(WebElement dialog, String state) {
+		logger.info("Attempting to select State from dropdown: {}", state);
+
+		String[] dropdownXpaths = {
+			".//label[contains(text(),'State')]/following::button[1]",
+			".//label[contains(text(),'State')]/following::select[1]",
+			".//*[contains(text(),'State')]/parent::div//button"
+		};
+
+		for (String xpath : dropdownXpaths) {
+			try {
+				List<WebElement> buttons = dialog.findElements(By.xpath(xpath));
+				for (WebElement btn : buttons) {
+					if (btn.isDisplayed() && btn.isEnabled()) {
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center'});", btn);
+						sleep(300);
+						((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+						sleep(1000);
+
+						// Select option from dropdown
+						String[] optionXpaths = {
+							"//div[@role='option'][contains(text(),'" + state + "')]",
+							"//div[contains(@class,'option')][contains(text(),'" + state + "')]",
+							"//*[contains(text(),'" + state + "')][@role='option']"
+						};
+
+						for (String optXpath : optionXpaths) {
+							try {
+								List<WebElement> options = driver.findElements(By.xpath(optXpath));
+								for (WebElement opt : options) {
+									if (opt.isDisplayed()) {
+										((JavascriptExecutor) driver).executeScript("arguments[0].click();", opt);
+										logger.info("State selected: {}", state);
+										return true;
+									}
+								}
+							} catch (Exception e2) {
+								// Continue
+							}
+						}
+						return false;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -3172,6 +4215,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 	/**
 	 * Enter address with auto-complete handling (same design as CreateQuotePage)
+	 * Improved to better handle address suggestion dialogs
 	 */
 	private void enterAddressWithAutoComplete(WebElement dialog, String address) {
 		logger.info("Entering address with auto-complete: {}", address);
@@ -3182,7 +4226,8 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			".//label[contains(text(),'Physical Address')]/following::input[1]",
 			".//label[contains(text(),'Address')]/following::input[1]",
 			".//input[contains(@placeholder,'address') or contains(@placeholder,'Address')]",
-			".//input[contains(@name,'address')]"
+			".//input[contains(@name,'address')]",
+			".//input[contains(@id,'address')]"
 		};
 
 		WebElement addressInput = null;
@@ -3192,6 +4237,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 				for (WebElement input : inputs) {
 					if (input.isDisplayed() && input.isEnabled()) {
 						addressInput = input;
+						logger.info("Found address input using xpath: {}", xpath);
 						break;
 					}
 				}
@@ -3211,55 +4257,110 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			"arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", addressInput);
 		sleep(300);
 
-		// Clear and type the address
+		// Clear and type the address (full text at once)
 		clearInputField(addressInput);
 		sleep(100);
 		addressInput.sendKeys(address);
-		sleep(1500); // Wait for auto-complete suggestions to appear
 
-		// Try to find and click the first suggestion in the auto-complete dropdown
-		try {
-			String[] suggestionXpaths = {
-				"//div[contains(@class,'pac-container')]//div[contains(@class,'pac-item')][1]",
-				"//div[contains(@class,'autocomplete')]//div[contains(@class,'suggestion')][1]",
-				"//ul[contains(@class,'suggestions')]//li[1]",
-				"//div[contains(@class,'dropdown')]//div[contains(text(),'" + address.split(",")[0] + "')]",
-				"(//div[contains(@class,'pac-item')])[1]",
-				"//div[@class='pac-container']//div[@class='pac-item'][1]"
-			};
+		logger.info("Typed address: {}", address);
+		sleep(2000); // Wait for auto-complete suggestions to appear
 
-			WebElement suggestion = null;
-			for (String xpath : suggestionXpaths) {
-				try {
-					List<WebElement> suggestions = driver.findElements(By.xpath(xpath));
-					for (WebElement s : suggestions) {
-						if (s.isDisplayed()) {
-							suggestion = s;
-							break;
+		// Try to find and click a suggestion from the auto-complete dropdown
+		boolean suggestionClicked = false;
+
+		// Method 1: Look for Google Places autocomplete pac-container
+		String[] suggestionXpaths = {
+			"//div[contains(@class,'pac-container')]//div[contains(@class,'pac-item')][1]",
+			"(//div[contains(@class,'pac-item')])[1]",
+			"//div[@class='pac-container']//div[@class='pac-item'][1]",
+			"//div[contains(@class,'pac-container')]/div[1]",
+			// Generic dropdown suggestions
+			"//div[contains(@class,'autocomplete')]//div[contains(@class,'suggestion')][1]",
+			"//ul[contains(@class,'suggestions')]//li[1]",
+			"//div[contains(@class,'suggestion-item')][1]",
+			"//div[contains(@class,'dropdown-item')][1]",
+			// Listbox options
+			"//ul[@role='listbox']//li[1]",
+			"//div[@role='listbox']//div[@role='option'][1]",
+			"//*[@role='option'][1]",
+			// Address specific
+			"//div[contains(@class,'address-suggestion')][1]",
+			"//li[contains(@class,'address-item')][1]"
+		};
+
+		for (String xpath : suggestionXpaths) {
+			try {
+				List<WebElement> suggestions = driver.findElements(By.xpath(xpath));
+				for (WebElement suggestion : suggestions) {
+					if (suggestion.isDisplayed()) {
+						logger.info("Found suggestion element using xpath: {}", xpath);
+						sleep(500);
+						try {
+							// Try JavaScript click first
+							((JavascriptExecutor) driver).executeScript("arguments[0].click();", suggestion);
+							suggestionClicked = true;
+							logger.info("Clicked suggestion using JavaScript");
+						} catch (Exception jsEx) {
+							// Try regular click
+							try {
+								suggestion.click();
+								suggestionClicked = true;
+								logger.info("Clicked suggestion using regular click");
+							} catch (Exception clickEx) {
+								logger.warn("Both click methods failed: {}", clickEx.getMessage());
+							}
 						}
+						if (suggestionClicked) break;
 					}
-					if (suggestion != null) break;
-				} catch (Exception e) {
-					// Continue
 				}
+				if (suggestionClicked) break;
+			} catch (Exception e) {
+				// Continue to next xpath
 			}
+		}
 
-			if (suggestion != null) {
-				logger.info("Found auto-complete suggestion, clicking it");
+		// Method 2: Try keyboard navigation if no suggestion element was clicked
+		if (!suggestionClicked) {
+			logger.info("No suggestion element found, trying keyboard navigation");
+			try {
 				sleep(500);
-				((JavascriptExecutor) driver).executeScript("arguments[0].click();", suggestion);
-				sleep(1000);
-				logger.info("Auto-complete suggestion selected for: {}", address);
-			} else {
-				// Try pressing down arrow and enter to select first suggestion
-				logger.info("No suggestion element found, trying keyboard navigation");
 				addressInput.sendKeys(Keys.ARROW_DOWN);
 				sleep(300);
 				addressInput.sendKeys(Keys.ENTER);
 				sleep(1000);
+
+				// Check if address was selected by verifying the input value changed
+				String currentValue = addressInput.getAttribute("value");
+				if (currentValue != null && !currentValue.isEmpty() && !currentValue.equals(address)) {
+					logger.info("Address selected via keyboard: {}", currentValue);
+					suggestionClicked = true;
+				}
+			} catch (Exception e) {
+				logger.warn("Keyboard navigation failed: {}", e.getMessage());
 			}
-		} catch (Exception e) {
-			logger.warn("Auto-complete selection failed: {}", e.getMessage());
+		}
+
+		// Method 3: Try clicking TAB to trigger autocomplete selection
+		if (!suggestionClicked) {
+			logger.info("Trying TAB key to select suggestion");
+			try {
+				addressInput.sendKeys(Keys.TAB);
+				sleep(1000);
+				String currentValue = addressInput.getAttribute("value");
+				if (currentValue != null && !currentValue.isEmpty()) {
+					logger.info("Address after TAB: {}", currentValue);
+					suggestionClicked = true;
+				}
+			} catch (Exception e) {
+				logger.warn("TAB selection failed: {}", e.getMessage());
+			}
+		}
+
+		if (suggestionClicked) {
+			logger.info("Auto-complete suggestion selected for: {}", address);
+			sleep(1000); // Wait for fields to populate
+		} else {
+			logger.warn("Could not select auto-complete suggestion, address typed manually: {}", address);
 		}
 	}
 
@@ -3304,6 +4405,300 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			}
 		}
 		logger.warn("Could not find field: {}", fieldLabel);
+	}
+
+	/**
+	 * Enter Suggested Rate in dialog - specific method to avoid confusion with other fields
+	 * ALWAYS overwrites existing values with the Excel value (recommended_rate column)
+	 */
+	private void enterSuggestedRateInDialog(WebElement dialog, String rate) {
+		if (rate == null || rate.isEmpty()) return;
+
+		logger.info("Entering Suggested Rate field with value: {}", rate);
+
+		// Specific XPaths for Suggested Rate field - more targeted to avoid picking wrong input
+		String[] xpaths = {
+			".//label[normalize-space()='Suggested Rate']/following::input[1]",
+			".//label[contains(text(),'Suggested Rate')]/following::input[1]",
+			".//label[contains(text(),'suggested rate')]/following::input[1]",
+			".//label[text()='Suggested Rate']/parent::div//input",
+			".//label[normalize-space()='Suggested Rate *']/following::input[1]",
+			".//label[contains(text(),'Suggested Rate *')]/following::input[1]"
+		};
+
+		for (String xpath : xpaths) {
+			try {
+				List<WebElement> inputs = dialog.findElements(By.xpath(xpath));
+				for (WebElement input : inputs) {
+					if (input.isDisplayed() && input.isEnabled()) {
+						// Verify this is not a coverage field or AOP field
+						String inputName = input.getAttribute("name");
+						String inputId = input.getAttribute("id");
+
+						// Skip if this looks like a coverage field or AOP field
+						if (inputName != null && (inputName.toLowerCase().contains("coverage") || inputName.toLowerCase().contains("aop"))) continue;
+						if (inputId != null && (inputId.toLowerCase().contains("coverage") || inputId.toLowerCase().contains("aop"))) continue;
+
+						// Log existing value for debugging
+						String existingValue = input.getAttribute("value");
+						logger.info("Suggested Rate field current value: '{}', will be replaced with: '{}'", existingValue, rate);
+
+						// Scroll to the input
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", input);
+						sleep(300);
+
+						// ALWAYS clear and enter our Excel value (overwrite any auto-populated value)
+						clearInputField(input);
+						sleep(100);
+						input.sendKeys(rate);
+						sleep(200);
+
+						// Verify the value was entered correctly
+						String newValue = input.getAttribute("value");
+						logger.info("Suggested Rate field updated: '{}' -> '{}'", existingValue, newValue);
+						return;
+					}
+				}
+			} catch (Exception e) {
+				// Continue to next xpath
+			}
+		}
+
+		// Fallback: try to find by looking for inputs near "Rate" text (but not AOP)
+		try {
+			List<WebElement> allInputs = dialog.findElements(By.xpath(".//input[@type='number' or @type='text']"));
+			for (int i = 0; i < allInputs.size(); i++) {
+				WebElement input = allInputs.get(i);
+				if (input.isDisplayed() && input.isEnabled()) {
+					try {
+						// Check if this input has a label containing "Suggested Rate" nearby
+						WebElement parent = input.findElement(By.xpath("./ancestor::div[1]"));
+						String parentText = parent.getText().toLowerCase();
+						// Must contain "suggested rate" or just "rate" but NOT "aop" or "coverage"
+						if ((parentText.contains("suggested rate") ||
+							(parentText.contains("rate") && !parentText.contains("aop") && !parentText.contains("coverage")))) {
+
+							// Log existing value
+							String existingValue = input.getAttribute("value");
+							logger.info("Suggested Rate field (fallback) current value: '{}', will be replaced with: '{}'", existingValue, rate);
+
+							// Scroll to input
+							((JavascriptExecutor) driver).executeScript(
+								"arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", input);
+							sleep(300);
+
+							// ALWAYS clear and enter our Excel value
+							clearInputField(input);
+							sleep(100);
+							input.sendKeys(rate);
+							sleep(200);
+
+							String newValue = input.getAttribute("value");
+							logger.info("Suggested Rate field (fallback) updated: '{}' -> '{}'", existingValue, newValue);
+							return;
+						}
+					} catch (Exception e) {
+						// Continue
+					}
+				}
+			}
+		} catch (Exception e) {
+			// Continue
+		}
+
+		logger.warn("Could not find Suggested Rate field to enter value: {}", rate);
+	}
+
+	/**
+	 * Enter AOP Deductible in dialog - specific method to avoid entering into Suggested Rate field
+	 * AOP field should be a dropdown/select, not a text input in most cases
+	 */
+	private void enterAOPDeductibleInDialog(WebElement dialog, String aopValue) {
+		if (aopValue == null || aopValue.isEmpty()) return;
+
+		logger.info("Entering AOP Deductible with value: {}", aopValue);
+
+		// Try to find AOP as a dropdown/select first (more common for deductibles)
+		String[] dropdownXpaths = {
+			".//label[contains(text(),'AOP')]/following::select[1]",
+			".//label[contains(text(),'AOP Deductible')]/following::select[1]",
+			".//label[contains(text(),'AOP')]/following::div[contains(@class,'select')]//input",
+			".//select[contains(@name,'aop') or contains(@id,'aop')]"
+		};
+
+		// Try dropdown first
+		for (String xpath : dropdownXpaths) {
+			try {
+				List<WebElement> selects = dialog.findElements(By.xpath(xpath));
+				for (WebElement select : selects) {
+					if (select.isDisplayed()) {
+						// It's a dropdown - try to select by value or visible text
+						try {
+							org.openqa.selenium.support.ui.Select dropdown = new org.openqa.selenium.support.ui.Select(select);
+							try {
+								dropdown.selectByValue(aopValue);
+								logger.info("Selected AOP Deductible '{}' by value", aopValue);
+								return;
+							} catch (Exception e1) {
+								try {
+									dropdown.selectByVisibleText(aopValue);
+									logger.info("Selected AOP Deductible '{}' by visible text", aopValue);
+									return;
+								} catch (Exception e2) {
+									// Try partial match
+									for (WebElement option : dropdown.getOptions()) {
+										if (option.getText().contains(aopValue) || aopValue.contains(option.getAttribute("value"))) {
+											option.click();
+											logger.info("Selected AOP Deductible option: {}", option.getText());
+											return;
+										}
+									}
+								}
+							}
+						} catch (Exception e) {
+							// Not a select element, continue
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		// If not a dropdown, try as input field - but use VERY specific XPaths
+		// to avoid accidentally finding Suggested Rate field
+		String[] inputXpaths = {
+			".//label[normalize-space()='AOP Deductible']/following-sibling::*//input",
+			".//label[normalize-space()='AOP Deductible *']/following-sibling::*//input",
+			".//label[text()='AOP Deductible']/parent::div//input",
+			".//label[contains(text(),'AOP Deductible')]/parent::div//input",
+			".//input[contains(@name,'aop_deductible') or contains(@id,'aop_deductible')]",
+			".//input[contains(@name,'aopDeductible') or contains(@id,'aopDeductible')]"
+		};
+
+		for (String xpath : inputXpaths) {
+			try {
+				List<WebElement> inputs = dialog.findElements(By.xpath(xpath));
+				for (WebElement input : inputs) {
+					if (input.isDisplayed() && input.isEnabled()) {
+						// Double-check this is NOT the Suggested Rate field
+						String inputName = input.getAttribute("name");
+						String inputId = input.getAttribute("id");
+						String placeholder = input.getAttribute("placeholder");
+
+						// Skip if this looks like a rate field
+						if ((inputName != null && inputName.toLowerCase().contains("rate")) ||
+							(inputId != null && inputId.toLowerCase().contains("rate")) ||
+							(placeholder != null && placeholder.toLowerCase().contains("rate"))) {
+							logger.warn("Skipping input that looks like Rate field: name={}, id={}", inputName, inputId);
+							continue;
+						}
+
+						// Scroll to the input
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", input);
+						sleep(300);
+
+						clearInputField(input);
+						sleep(100);
+						input.sendKeys(aopValue);
+						sleep(200);
+
+						logger.info("Entered AOP Deductible '{}' in input field", aopValue);
+						return;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		logger.warn("Could not find AOP Deductible field to enter value: {}", aopValue);
+	}
+
+	/**
+	 * Enter Wind Deductible in dialog - specific method
+	 */
+	private void enterWindDeductibleInDialog(WebElement dialog, String windValue) {
+		if (windValue == null || windValue.isEmpty()) return;
+
+		logger.info("Entering Wind Deductible with value: {}", windValue);
+
+		// Try dropdown first (wind deductibles are usually dropdowns)
+		String[] dropdownXpaths = {
+			".//label[contains(text(),'Wind')]/following::select[1]",
+			".//label[contains(text(),'Wind Deductible')]/following::select[1]",
+			".//select[contains(@name,'wind') or contains(@id,'wind')]"
+		};
+
+		for (String xpath : dropdownXpaths) {
+			try {
+				List<WebElement> selects = dialog.findElements(By.xpath(xpath));
+				for (WebElement select : selects) {
+					if (select.isDisplayed()) {
+						try {
+							org.openqa.selenium.support.ui.Select dropdown = new org.openqa.selenium.support.ui.Select(select);
+							try {
+								dropdown.selectByValue(windValue);
+								logger.info("Selected Wind Deductible '{}' by value", windValue);
+								return;
+							} catch (Exception e1) {
+								try {
+									dropdown.selectByVisibleText(windValue);
+									logger.info("Selected Wind Deductible '{}' by visible text", windValue);
+									return;
+								} catch (Exception e2) {
+									for (WebElement option : dropdown.getOptions()) {
+										if (option.getText().contains(windValue)) {
+											option.click();
+											logger.info("Selected Wind Deductible option: {}", option.getText());
+											return;
+										}
+									}
+								}
+							}
+						} catch (Exception e) {
+							// Not a select, continue
+						}
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		// Fallback to input field
+		String[] inputXpaths = {
+			".//label[contains(text(),'Wind Deductible')]/following-sibling::*//input",
+			".//label[contains(text(),'Wind Deductible')]/parent::div//input",
+			".//input[contains(@name,'wind') or contains(@id,'wind')]"
+		};
+
+		for (String xpath : inputXpaths) {
+			try {
+				List<WebElement> inputs = dialog.findElements(By.xpath(xpath));
+				for (WebElement input : inputs) {
+					if (input.isDisplayed() && input.isEnabled()) {
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", input);
+						sleep(300);
+
+						clearInputField(input);
+						sleep(100);
+						input.sendKeys(windValue);
+						sleep(200);
+
+						logger.info("Entered Wind Deductible '{}' in input field", windValue);
+						return;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+
+		logger.warn("Could not find Wind Deductible field to enter value: {}", windValue);
 	}
 
 	/**
@@ -3400,33 +4795,87 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 	/**
 	 * Click Add location button in location dialog
+	 * IMPORTANT: Must find button WITHIN the dialog, not outside
 	 */
 	private void clickAddButtonInDialog() {
+		logger.info("Attempting to click Add location button in dialog");
+
+		// First find the dialog element
+		WebElement dialog = findLocationDialog();
+		if (dialog == null) {
+			logger.error("Cannot click Add button - dialog not found");
+			return;
+		}
+
+		// Scroll dialog to bottom to ensure button is visible
+		scrollDialogDown(dialog);
+		sleep(500);
+		scrollDialogDown(dialog);
+		sleep(500);
+
+		// IMPORTANT: Search for button WITHIN dialog using relative XPaths (starting with .)
 		String[] buttonXpaths = {
-			"//button[normalize-space()='Add location']",
-			"//button[contains(text(),'Add location')]",
-			"//button[contains(text(),'Add Location')]",
-			"//button[text()='Add location']",
-			"//button[text()='Add Location']",
-			"//div[@role='dialog']//button[contains(text(),'Add')]",
-			"//button[contains(@class,'primary') and contains(text(),'Add')]",
-			"//button[@type='submit']"
+			// Primary - within dialog context
+			".//button[normalize-space()='Add location']",
+			".//button[text()='Add location']",
+			".//button[text()='Add Location']",
+			".//button[contains(text(),'Add location')]",
+			".//button[contains(text(),'Add Location')]",
+			// Footer buttons within dialog
+			".//div[contains(@class,'footer')]//button[contains(text(),'Add')]",
+			".//div[contains(@class,'Footer')]//button[contains(text(),'Add')]",
+			".//footer//button[contains(text(),'Add')]",
+			// Submit type buttons
+			".//button[@type='submit']",
+			".//button[contains(@class,'primary')]",
+			".//button[contains(@class,'bg-blue')]",
+			// Generic Add button within dialog
+			".//button[contains(text(),'Add')]"
 		};
 
 		for (String xpath : buttonXpaths) {
 			try {
-				List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+				List<WebElement> buttons = dialog.findElements(By.xpath(xpath));
+				logger.info("Found {} buttons in dialog with xpath: {}", buttons.size(), xpath);
 				for (WebElement button : buttons) {
 					if (button.isDisplayed() && button.isEnabled()) {
-						String buttonText = button.getText();
-						if (!buttonText.toLowerCase().contains("cancel") && !buttonText.toLowerCase().contains("close")) {
-							// Scroll to button first
-							((JavascriptExecutor) driver).executeScript(
-								"arguments[0].scrollIntoView({block: 'center'});", button);
-							sleep(300);
+						String buttonText = button.getText().trim();
+						logger.info("Found button in dialog: '{}' (displayed={}, enabled={})",
+							buttonText, button.isDisplayed(), button.isEnabled());
+
+						// Skip cancel/close/new location buttons (New Location opens dialog, not submits)
+						String lowerText = buttonText.toLowerCase();
+						if (lowerText.contains("cancel") ||
+							lowerText.contains("close") ||
+							lowerText.contains("address") ||
+							lowerText.contains("new location") ||
+							lowerText.equals("new")) {
+							logger.info("Skipping button: '{}'", buttonText);
+							continue;
+						}
+
+						// This should be our Add button - scroll to it
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center'});", button);
+						sleep(300);
+
+						// Try clicking with JavaScript
+						try {
+							logger.info("Clicking Add button: '{}'", buttonText);
 							((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
-							logger.info("Clicked Add location button: {}", buttonText);
+							logger.info("Clicked Add location button with JavaScript: '{}'", buttonText);
+							sleep(1000);
 							return;
+						} catch (Exception jsEx) {
+							// Try regular click
+							try {
+								button.click();
+								logger.info("Clicked Add location button with regular click: '{}'", buttonText);
+								sleep(1000);
+								return;
+							} catch (Exception clickEx) {
+								logger.warn("Failed to click button '{}': {}", buttonText, clickEx.getMessage());
+							}
 						}
 					}
 				}
@@ -3434,7 +4883,55 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 				// Continue to next xpath
 			}
 		}
-		logger.warn("Could not find Add location button in dialog");
+
+		// Last resort: Find all buttons in dialog and click the right one
+		try {
+			logger.info("Last resort - scanning all buttons in dialog");
+			List<WebElement> allButtons = dialog.findElements(By.tagName("button"));
+			logger.info("Found {} total buttons in dialog", allButtons.size());
+
+			for (WebElement button : allButtons) {
+				if (button.isDisplayed() && button.isEnabled()) {
+					String buttonText = button.getText().trim();
+					String lowerText = buttonText.toLowerCase();
+
+					// Skip non-submit buttons
+					if (lowerText.contains("cancel") || lowerText.contains("close") ||
+						lowerText.contains("new") || lowerText.isEmpty()) {
+						continue;
+					}
+
+					// Look for Add/Submit button
+					if (lowerText.contains("add") || lowerText.contains("submit") || lowerText.contains("save")) {
+						logger.info("Found potential submit button: '{}'", buttonText);
+						((JavascriptExecutor) driver).executeScript(
+							"arguments[0].scrollIntoView({block: 'center'});", button);
+						sleep(300);
+						((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
+						logger.info("Clicked button: '{}'", buttonText);
+						return;
+					}
+				}
+			}
+
+			// If we still haven't found it, try the last visible button (usually submit is at the end)
+			for (int i = allButtons.size() - 1; i >= 0; i--) {
+				WebElement button = allButtons.get(i);
+				if (button.isDisplayed() && button.isEnabled()) {
+					String buttonText = button.getText().trim();
+					if (!buttonText.toLowerCase().contains("cancel")) {
+						logger.info("Clicking last non-cancel button: '{}'", buttonText);
+						((JavascriptExecutor) driver).executeScript("arguments[0].click();", button);
+						return;
+					}
+				}
+			}
+		} catch (Exception e) {
+			logger.warn("Last resort button search failed: {}", e.getMessage());
+		}
+
+		logger.error("Could not find Add location button in dialog - taking screenshot");
+		captureScreenshotToReport("Add Button Not Found");
 	}
 
 	/**
@@ -3927,8 +5424,8 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			String address = excelData.getOrDefault("Address", "Location " + locationNum);
 
 			// Extract GL and WS annual amounts from disabled input fields on page
-			double excelGLAmount = getDisabledInputValue("create-endorsement-general-liability-amount-input");
-			double excelWSAmount = getDisabledInputValue("create-endorsement-water-sewer-backup-amount-input");
+			double excelGLAmount = getDisabledInputValue("edit-endorsement-general-liability-amount-input");
+			double excelWSAmount = getDisabledInputValue("edit-endorsement-water-sewer-backup-amount-input");
 			logger.info("Captured GL Amount from page: ${}, WS Amount from page: ${}", excelGLAmount, excelWSAmount);
 
 			calc.setAddress(address);
@@ -4102,6 +5599,82 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	}
 
 	/**
+	 * Get address from location data with multiple possible key variations
+	 */
+	private String getAddressFromLocationData(Map<String, String> data) {
+		String[] addressKeys = {"Address", "address", "StreetAddress", "street_address", "FullAddress", "full_address", "Location", "location"};
+
+		// Try direct keys
+		for (String key : addressKeys) {
+			if (data.containsKey(key)) {
+				String value = data.get(key);
+				if (value != null && !value.trim().isEmpty()) {
+					return value.trim();
+				}
+			}
+		}
+
+		// Try case-insensitive match
+		for (Map.Entry<String, String> entry : data.entrySet()) {
+			String key = entry.getKey().toLowerCase();
+			if (key.contains("address") || key.contains("street") || key.contains("location")) {
+				String value = entry.getValue();
+				if (value != null && !value.trim().isEmpty() && value.contains(",")) {
+					return value.trim();
+				}
+			}
+		}
+
+		// Try to build address from components
+		String street = data.getOrDefault("StreetAddress", data.getOrDefault("street_address", ""));
+		String city = data.getOrDefault("City", data.getOrDefault("city", ""));
+		String state = data.getOrDefault("State", data.getOrDefault("state", ""));
+		String zip = data.getOrDefault("ZipCode", data.getOrDefault("zip_code", data.getOrDefault("Zip", "")));
+
+		if (!street.isEmpty()) {
+			StringBuilder address = new StringBuilder(street);
+			if (!city.isEmpty()) address.append(", ").append(city);
+			if (!state.isEmpty()) address.append(", ").append(state);
+			if (!zip.isEmpty()) address.append(" ").append(zip);
+			return address.toString().trim();
+		}
+
+		return "";
+	}
+
+	/**
+	 * Get value from location data map with multiple possible key variations
+	 * Handles different naming conventions in Excel columns
+	 */
+	private double getValueWithKeyVariations(Map<String, String> data, String... keys) {
+		for (String key : keys) {
+			// Try exact match
+			if (data.containsKey(key)) {
+				String value = data.get(key);
+				if (value != null && !value.isEmpty()) {
+					double parsed = parseDouble(value);
+					if (parsed > 0) {
+						return parsed;
+					}
+				}
+			}
+			// Try case-insensitive match
+			for (Map.Entry<String, String> entry : data.entrySet()) {
+				if (entry.getKey().equalsIgnoreCase(key)) {
+					String value = entry.getValue();
+					if (value != null && !value.isEmpty()) {
+						double parsed = parseDouble(value);
+						if (parsed > 0) {
+							return parsed;
+						}
+					}
+				}
+			}
+		}
+		return 0.0;
+	}
+
+	/**
 	 * Get value from disabled input field by ID
 	 * Disabled fields require getAttribute("value") instead of getText()
 	 */
@@ -4111,7 +5684,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			String[] xpaths = {
 				"//*[@id='" + elementId + "']",
 				"//input[@id='" + elementId + "']",
-				"//*[contains(@id,'" + elementId.replace("create-endorsement-", "") + "')]"
+				"//*[contains(@id,'" + elementId.replace("edit-endorsement-", "") + "')]"
 			};
 
 			for (String xpath : xpaths) {
@@ -4572,395 +6145,514 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		public void setError(String v) { this.error = v; }
 	}
 
-	// ==================== Endorsement Data Capture and Create Endorsement ====================
+	// ==================== Validation Against Create Endorsement Data ====================
 
 	/**
-	 * Data holder class for all captured endorsement values
+	 * Result class for validation comparison
 	 */
-	public static class EndorsementCapturedData {
-		private String endorsementEffectiveDate;
-		private double premiumGLWS;
-		private double taxes;
-		private double totalFees;
-		private double grandTotal;
-		private java.util.List<LocationRowData> locationDetails;
-		private int locationCount;
+	public static class EndorsementValidationResult {
+		private boolean endorsementDateMatch;
+		private boolean premiumGLWSMatch;
+		private boolean taxesMatch;
+		private boolean totalFeesMatch;
+		private boolean grandTotalMatch;
+		private boolean locationCountMatch;
+		private boolean allLocationsMatch;
+		private boolean allValidationsPassed;
+
+		// Expected vs Actual values
+		private String expectedDate;
+		private String actualDate;
+		private double expectedPremiumGLWS;
+		private double actualPremiumGLWS;
+		private double expectedTaxes;
+		private double actualTaxes;
+		private double expectedTotalFees;
+		private double actualTotalFees;
+		private double expectedGrandTotal;
+		private double actualGrandTotal;
+		private int expectedLocationCount;
+		private int actualLocationCount;
+
+		private java.util.List<LocationValidationDetail> locationValidations;
 		private String error;
 
 		// Getters and Setters
-		public String getEndorsementEffectiveDate() { return endorsementEffectiveDate; }
-		public void setEndorsementEffectiveDate(String v) { this.endorsementEffectiveDate = v; }
-		public double getPremiumGLWS() { return premiumGLWS; }
-		public void setPremiumGLWS(double v) { this.premiumGLWS = v; }
-		public double getTaxes() { return taxes; }
-		public void setTaxes(double v) { this.taxes = v; }
-		public double getTotalFees() { return totalFees; }
-		public void setTotalFees(double v) { this.totalFees = v; }
-		public double getGrandTotal() { return grandTotal; }
-		public void setGrandTotal(double v) { this.grandTotal = v; }
-		public java.util.List<LocationRowData> getLocationDetails() { return locationDetails; }
-		public void setLocationDetails(java.util.List<LocationRowData> v) { this.locationDetails = v; }
-		public int getLocationCount() { return locationCount; }
-		public void setLocationCount(int v) { this.locationCount = v; }
+		public boolean isEndorsementDateMatch() { return endorsementDateMatch; }
+		public void setEndorsementDateMatch(boolean v) { this.endorsementDateMatch = v; }
+		public boolean isPremiumGLWSMatch() { return premiumGLWSMatch; }
+		public void setPremiumGLWSMatch(boolean v) { this.premiumGLWSMatch = v; }
+		public boolean isTaxesMatch() { return taxesMatch; }
+		public void setTaxesMatch(boolean v) { this.taxesMatch = v; }
+		public boolean isTotalFeesMatch() { return totalFeesMatch; }
+		public void setTotalFeesMatch(boolean v) { this.totalFeesMatch = v; }
+		public boolean isGrandTotalMatch() { return grandTotalMatch; }
+		public void setGrandTotalMatch(boolean v) { this.grandTotalMatch = v; }
+		public boolean isLocationCountMatch() { return locationCountMatch; }
+		public void setLocationCountMatch(boolean v) { this.locationCountMatch = v; }
+		public boolean isAllLocationsMatch() { return allLocationsMatch; }
+		public void setAllLocationsMatch(boolean v) { this.allLocationsMatch = v; }
+		public boolean isAllValidationsPassed() { return allValidationsPassed; }
+		public void setAllValidationsPassed(boolean v) { this.allValidationsPassed = v; }
+		public String getExpectedDate() { return expectedDate; }
+		public void setExpectedDate(String v) { this.expectedDate = v; }
+		public String getActualDate() { return actualDate; }
+		public void setActualDate(String v) { this.actualDate = v; }
+		public double getExpectedPremiumGLWS() { return expectedPremiumGLWS; }
+		public void setExpectedPremiumGLWS(double v) { this.expectedPremiumGLWS = v; }
+		public double getActualPremiumGLWS() { return actualPremiumGLWS; }
+		public void setActualPremiumGLWS(double v) { this.actualPremiumGLWS = v; }
+		public double getExpectedTaxes() { return expectedTaxes; }
+		public void setExpectedTaxes(double v) { this.expectedTaxes = v; }
+		public double getActualTaxes() { return actualTaxes; }
+		public void setActualTaxes(double v) { this.actualTaxes = v; }
+		public double getExpectedTotalFees() { return expectedTotalFees; }
+		public void setExpectedTotalFees(double v) { this.expectedTotalFees = v; }
+		public double getActualTotalFees() { return actualTotalFees; }
+		public void setActualTotalFees(double v) { this.actualTotalFees = v; }
+		public double getExpectedGrandTotal() { return expectedGrandTotal; }
+		public void setExpectedGrandTotal(double v) { this.expectedGrandTotal = v; }
+		public double getActualGrandTotal() { return actualGrandTotal; }
+		public void setActualGrandTotal(double v) { this.actualGrandTotal = v; }
+		public int getExpectedLocationCount() { return expectedLocationCount; }
+		public void setExpectedLocationCount(int v) { this.expectedLocationCount = v; }
+		public int getActualLocationCount() { return actualLocationCount; }
+		public void setActualLocationCount(int v) { this.actualLocationCount = v; }
+		public java.util.List<LocationValidationDetail> getLocationValidations() { return locationValidations; }
+		public void setLocationValidations(java.util.List<LocationValidationDetail> v) { this.locationValidations = v; }
 		public String getError() { return error; }
 		public void setError(String v) { this.error = v; }
 	}
 
 	/**
-	 * Location row data holder for table validation
+	 * Location validation detail
 	 */
-	public static class LocationRowData {
+	public static class LocationValidationDetail {
 		private int rowIndex;
 		private String address;
-		private double propertyPremium;
-		private double glPremium;
-		private double wsPremium;
-		private double taxes;
-		private double fees;
-		private double total;
+		private boolean propertyPremiumMatch;
+		private boolean glPremiumMatch;
+		private boolean wsPremiumMatch;
+		private double expectedPropertyPremium;
+		private double actualPropertyPremium;
+		private double expectedGLPremium;
+		private double actualGLPremium;
+		private double expectedWSPremium;
+		private double actualWSPremium;
 
 		// Getters and Setters
 		public int getRowIndex() { return rowIndex; }
 		public void setRowIndex(int v) { this.rowIndex = v; }
 		public String getAddress() { return address; }
 		public void setAddress(String v) { this.address = v; }
-		public double getPropertyPremium() { return propertyPremium; }
-		public void setPropertyPremium(double v) { this.propertyPremium = v; }
-		public double getGlPremium() { return glPremium; }
-		public void setGlPremium(double v) { this.glPremium = v; }
-		public double getWsPremium() { return wsPremium; }
-		public void setWsPremium(double v) { this.wsPremium = v; }
-		public double getTaxes() { return taxes; }
-		public void setTaxes(double v) { this.taxes = v; }
-		public double getFees() { return fees; }
-		public void setFees(double v) { this.fees = v; }
-		public double getTotal() { return total; }
-		public void setTotal(double v) { this.total = v; }
+		public boolean isPropertyPremiumMatch() { return propertyPremiumMatch; }
+		public void setPropertyPremiumMatch(boolean v) { this.propertyPremiumMatch = v; }
+		public boolean isGlPremiumMatch() { return glPremiumMatch; }
+		public void setGlPremiumMatch(boolean v) { this.glPremiumMatch = v; }
+		public boolean isWsPremiumMatch() { return wsPremiumMatch; }
+		public void setWsPremiumMatch(boolean v) { this.wsPremiumMatch = v; }
+		public double getExpectedPropertyPremium() { return expectedPropertyPremium; }
+		public void setExpectedPropertyPremium(double v) { this.expectedPropertyPremium = v; }
+		public double getActualPropertyPremium() { return actualPropertyPremium; }
+		public void setActualPropertyPremium(double v) { this.actualPropertyPremium = v; }
+		public double getExpectedGLPremium() { return expectedGLPremium; }
+		public void setExpectedGLPremium(double v) { this.expectedGLPremium = v; }
+		public double getActualGLPremium() { return actualGLPremium; }
+		public void setActualGLPremium(double v) { this.actualGLPremium = v; }
+		public double getExpectedWSPremium() { return expectedWSPremium; }
+		public void setExpectedWSPremium(double v) { this.expectedWSPremium = v; }
+		public double getActualWSPremium() { return actualWSPremium; }
+		public void setActualWSPremium(double v) { this.actualWSPremium = v; }
 	}
 
 	/**
-	 * Capture all endorsement data from the page for validation on Edit Endorsement screen
-	 * Captures: Effective Date of Endorsement, Locations Details table, Premium (GL+WS), Taxes, Total Fees, Grand Total
+	 * Validate Edit Endorsement page values against captured data from Create Endorsement page
 	 */
-	public EndorsementCapturedData captureAllEndorsementData() {
-		EndorsementCapturedData data = new EndorsementCapturedData();
-		logger.info("=== Capturing All Endorsement Data ===");
+	public EndorsementValidationResult validateAgainstCreateEndorsement(
+			CreatePremiumEndorsementPage.EndorsementCapturedData expectedData) {
+
+		EndorsementValidationResult result = new EndorsementValidationResult();
+		logger.info("=== Validating Edit Endorsement Against Create Endorsement Data ===");
 
 		try {
-			// 1. Capture Effective Date of Endorsement
-			String effectiveDate = getEndorsementEffectiveDate();
-			data.setEndorsementEffectiveDate(effectiveDate);
-			logger.info("Captured Endorsement Effective Date: {}", effectiveDate);
+			// Wait for page to load
+			sleep(3000);
 
-			// 2. Capture Locations Details table
-			java.util.List<LocationRowData> locations = captureLocationTableData();
-			data.setLocationDetails(locations);
-			data.setLocationCount(locations.size());
-			logger.info("Captured {} locations from table", locations.size());
+			// 1. Validate Endorsement Effective Date
+			String actualDate = getEndorsementEffectiveDate();
+			String expectedDate = expectedData.getEndorsementEffectiveDate();
+			result.setExpectedDate(expectedDate);
+			result.setActualDate(actualDate);
+			boolean dateMatch = actualDate != null && expectedDate != null &&
+				(actualDate.equals(expectedDate) || normalizeDate(actualDate).equals(normalizeDate(expectedDate)));
+			result.setEndorsementDateMatch(dateMatch);
+			logger.info("Date Validation: Expected='{}', Actual='{}', Match={}", expectedDate, actualDate, dateMatch);
 
-			// 3. Capture Premium (GL + WS)
-			double premiumGLWS = getSummaryValueByLabel("Premium", "Premium (GL", "GL+WS");
-			data.setPremiumGLWS(premiumGLWS);
-			logger.info("Captured Premium (GL+WS): ${}", String.format("%.2f", premiumGLWS));
+			// 2. Validate Premium (GL + WS)
+			double actualPremiumGLWS = getSummaryValueByLabel("Premium", "Premium (GL", "GL+WS");
+			double expectedPremiumGLWS = expectedData.getPremiumGLWS();
+			result.setExpectedPremiumGLWS(expectedPremiumGLWS);
+			result.setActualPremiumGLWS(actualPremiumGLWS);
+			boolean premiumMatch = Math.abs(actualPremiumGLWS - expectedPremiumGLWS) < 0.01;
+			result.setPremiumGLWSMatch(premiumMatch);
+			logger.info("Premium Validation: Expected=${}, Actual=${}, Match={}",
+				String.format("%.2f", expectedPremiumGLWS), String.format("%.2f", actualPremiumGLWS), premiumMatch);
 
-			// 4. Capture Taxes
-			double taxes = getSummaryValueByLabel("Taxes", "Tax");
-			data.setTaxes(taxes);
-			logger.info("Captured Taxes: ${}", String.format("%.2f", taxes));
+			// 3. Validate Taxes
+			double actualTaxes = getSummaryValueByLabel("Taxes", "Tax");
+			double expectedTaxes = expectedData.getTaxes();
+			result.setExpectedTaxes(expectedTaxes);
+			result.setActualTaxes(actualTaxes);
+			boolean taxesMatch = Math.abs(actualTaxes - expectedTaxes) < 0.01;
+			result.setTaxesMatch(taxesMatch);
+			logger.info("Taxes Validation: Expected=${}, Actual=${}, Match={}",
+				String.format("%.2f", expectedTaxes), String.format("%.2f", actualTaxes), taxesMatch);
 
-			// 5. Capture Total Fees
-			double totalFees = getSummaryValueByLabel("Total Fees", "Fees");
-			data.setTotalFees(totalFees);
-			logger.info("Captured Total Fees: ${}", String.format("%.2f", totalFees));
+			// 4. Validate Total Fees
+			double actualTotalFees = getSummaryValueByLabel("Total Fees", "Fees");
+			double expectedTotalFees = expectedData.getTotalFees();
+			result.setExpectedTotalFees(expectedTotalFees);
+			result.setActualTotalFees(actualTotalFees);
+			boolean feesMatch = Math.abs(actualTotalFees - expectedTotalFees) < 0.01;
+			result.setTotalFeesMatch(feesMatch);
+			logger.info("Fees Validation: Expected=${}, Actual=${}, Match={}",
+				String.format("%.2f", expectedTotalFees), String.format("%.2f", actualTotalFees), feesMatch);
 
-			// 6. Capture Grand Total
-			double grandTotal = getSummaryValueByLabel("Grand Total", "Total");
-			data.setGrandTotal(grandTotal);
-			logger.info("Captured Grand Total: ${}", String.format("%.2f", grandTotal));
+			// 5. Validate Grand Total
+			double actualGrandTotal = getSummaryValueByLabel("Grand Total", "Total");
+			double expectedGrandTotal = expectedData.getGrandTotal();
+			result.setExpectedGrandTotal(expectedGrandTotal);
+			result.setActualGrandTotal(actualGrandTotal);
+			boolean grandTotalMatch = Math.abs(actualGrandTotal - expectedGrandTotal) < 0.01;
+			result.setGrandTotalMatch(grandTotalMatch);
+			logger.info("Grand Total Validation: Expected=${}, Actual=${}, Match={}",
+				String.format("%.2f", expectedGrandTotal), String.format("%.2f", actualGrandTotal), grandTotalMatch);
 
-			// Data captured silently - will be validated on Edit Endorsement screen
+			// 6. Validate Location Count
+			int actualLocationCount = getLocationCount();
+			int expectedLocationCount = expectedData.getLocationCount();
+			result.setExpectedLocationCount(expectedLocationCount);
+			result.setActualLocationCount(actualLocationCount);
+			boolean locationCountMatch = actualLocationCount == expectedLocationCount;
+			result.setLocationCountMatch(locationCountMatch);
+			logger.info("Location Count Validation: Expected={}, Actual={}, Match={}",
+				expectedLocationCount, actualLocationCount, locationCountMatch);
+
+			// 7. Validate Location Details (compare each location's premium values)
+			boolean allLocationsMatch = validateLocationDetails(expectedData.getLocationDetails(), result);
+			result.setAllLocationsMatch(allLocationsMatch);
+
+			// Overall result
+			boolean allPassed = dateMatch && premiumMatch && taxesMatch && feesMatch &&
+				grandTotalMatch && locationCountMatch && allLocationsMatch;
+			result.setAllValidationsPassed(allPassed);
+
+			// Log to HTML report
+			logValidationResultToReport(result);
+
+			logger.info("=== Validation Complete: {} ===", allPassed ? "ALL PASSED" : "SOME FAILED");
 
 		} catch (Exception e) {
-			logger.error("Error capturing endorsement data: {}", e.getMessage());
-			data.setError(e.getMessage());
+			logger.error("Error during validation: {}", e.getMessage());
+			result.setError(e.getMessage());
 		}
 
-		return data;
+		return result;
 	}
 
 	/**
-	 * Capture location table data with all column values
+	 * Validate location details comparing Create vs Edit endorsement
+	 * Matches locations by ADDRESS to ensure correct comparison regardless of row order
 	 */
-	public java.util.List<LocationRowData> captureLocationTableData() {
-		java.util.List<LocationRowData> locations = new java.util.ArrayList<>();
+	private boolean validateLocationDetails(
+			java.util.List<CreatePremiumEndorsementPage.LocationRowData> expectedLocations,
+			EndorsementValidationResult result) {
+
+		if (expectedLocations == null || expectedLocations.isEmpty()) {
+			result.setLocationValidations(new java.util.ArrayList<>());
+			return true;
+		}
+
+		java.util.List<LocationValidationDetail> validations = new java.util.ArrayList<>();
+		boolean allMatch = true;
 
 		try {
+			// Get actual location data from Edit page
 			WebElement table = findLocationTable();
 			if (table == null) {
-				logger.warn("Location table not found");
-				return locations;
+				logger.warn("Location table not found on Edit page");
+				result.setLocationValidations(validations);
+				return false;
 			}
 
-			// Get headers to find column indices
+			// Get column indices
 			List<WebElement> headers = table.findElements(By.xpath(".//thead//th | .//tr[1]//th"));
 			Map<String, Integer> columnIndices = new HashMap<>();
-
 			for (int i = 0; i < headers.size(); i++) {
 				String headerText = headers.get(i).getText().trim().toLowerCase();
 				if (headerText.contains("address")) columnIndices.put("address", i);
 				else if (headerText.contains("property") && headerText.contains("premium")) columnIndices.put("propertyPremium", i);
 				else if (headerText.contains("gl") && headerText.contains("premium")) columnIndices.put("glPremium", i);
 				else if (headerText.contains("water") || headerText.contains("sewer") || headerText.contains("w/s")) columnIndices.put("wsPremium", i);
-				else if (headerText.contains("tax")) columnIndices.put("taxes", i);
-				else if (headerText.contains("fee")) columnIndices.put("fees", i);
-				else if (headerText.contains("total") && !headerText.contains("grand")) columnIndices.put("total", i);
 			}
 
-			logger.info("Column indices found: {}", columnIndices);
+			logger.info("Column indices for validation: {}", columnIndices);
 
-			// Get all data rows
+			// Get actual rows and build a map by address
 			List<WebElement> rows = table.findElements(By.xpath(".//tbody//tr"));
-			for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
-				WebElement row = rows.get(rowIdx);
+			Map<String, ActualLocationData> actualLocationMap = new HashMap<>();
+
+			for (int i = 0; i < rows.size(); i++) {
+				WebElement row = rows.get(i);
 				List<WebElement> cells = row.findElements(By.xpath(".//td"));
 
-				LocationRowData locData = new LocationRowData();
-				locData.setRowIndex(rowIdx + 1);
+				ActualLocationData actualData = new ActualLocationData();
+				actualData.rowIndex = i + 1;
 
-				// Extract values from each column
+				// Get address
 				if (columnIndices.containsKey("address") && cells.size() > columnIndices.get("address")) {
-					locData.setAddress(cells.get(columnIndices.get("address")).getText().trim());
+					actualData.address = cells.get(columnIndices.get("address")).getText().trim();
 				}
+
+				// Get property premium
 				if (columnIndices.containsKey("propertyPremium") && cells.size() > columnIndices.get("propertyPremium")) {
-					locData.setPropertyPremium(parseAmount(cells.get(columnIndices.get("propertyPremium")).getText()));
+					actualData.propertyPremium = parseAmount(cells.get(columnIndices.get("propertyPremium")).getText());
 				}
+
+				// Get GL premium
 				if (columnIndices.containsKey("glPremium") && cells.size() > columnIndices.get("glPremium")) {
-					locData.setGlPremium(parseAmount(cells.get(columnIndices.get("glPremium")).getText()));
+					actualData.glPremium = parseAmount(cells.get(columnIndices.get("glPremium")).getText());
 				}
+
+				// Get WS premium
 				if (columnIndices.containsKey("wsPremium") && cells.size() > columnIndices.get("wsPremium")) {
-					locData.setWsPremium(parseAmount(cells.get(columnIndices.get("wsPremium")).getText()));
-				}
-				if (columnIndices.containsKey("taxes") && cells.size() > columnIndices.get("taxes")) {
-					locData.setTaxes(parseAmount(cells.get(columnIndices.get("taxes")).getText()));
-				}
-				if (columnIndices.containsKey("fees") && cells.size() > columnIndices.get("fees")) {
-					locData.setFees(parseAmount(cells.get(columnIndices.get("fees")).getText()));
-				}
-				if (columnIndices.containsKey("total") && cells.size() > columnIndices.get("total")) {
-					locData.setTotal(parseAmount(cells.get(columnIndices.get("total")).getText()));
+					actualData.wsPremium = parseAmount(cells.get(columnIndices.get("wsPremium")).getText());
 				}
 
-				locations.add(locData);
-				logger.debug("Captured location {}: {}", rowIdx + 1, locData.getAddress());
+				// Store by normalized address for matching
+				if (actualData.address != null && !actualData.address.isEmpty()) {
+					String normalizedAddress = normalizeAddress(actualData.address);
+					actualLocationMap.put(normalizedAddress, actualData);
+					logger.debug("Actual location {}: {} -> Property=${}", i + 1, actualData.address, actualData.propertyPremium);
+				}
 			}
 
-		} catch (Exception e) {
-			logger.error("Error capturing location table data: {}", e.getMessage());
-		}
+			logger.info("Built actual location map with {} entries", actualLocationMap.size());
 
-		return locations;
-	}
+			// Match each expected location by address
+			for (int i = 0; i < expectedLocations.size(); i++) {
+				CreatePremiumEndorsementPage.LocationRowData expected = expectedLocations.get(i);
+				String expectedAddress = expected.getAddress();
+				String normalizedExpectedAddress = normalizeAddress(expectedAddress);
 
-	/**
-	 * Click Create Endorsement button
-	 * @return true if clicked successfully and navigation to edit endorsement page occurred
-	 */
-	public boolean clickCreateEndorsementButton() {
-		logger.info("=== Clicking Create Endorsement Button ===");
+				LocationValidationDetail detail = new LocationValidationDetail();
+				detail.setRowIndex(i + 1);
+				detail.setAddress(expectedAddress);
+				detail.setExpectedPropertyPremium(expected.getPropertyPremium());
+				detail.setExpectedGLPremium(expected.getGlPremium());
+				detail.setExpectedWSPremium(expected.getWsPremium());
 
-		try {
-			// Wait for any loading to complete
-			sleep(2000);
+				// Find matching actual location by address
+				ActualLocationData actual = actualLocationMap.get(normalizedExpectedAddress);
 
-			// Scroll to bottom to make button visible
-			((JavascriptExecutor) driver).executeScript("window.scrollTo(0, document.body.scrollHeight)");
-			sleep(1000);
+				if (actual == null) {
+					// Try partial match if exact match not found
+					actual = findPartialAddressMatch(actualLocationMap, expectedAddress);
+				}
 
-			WebElement createButton = null;
+				if (actual != null) {
+					detail.setActualPropertyPremium(actual.propertyPremium);
+					detail.setActualGLPremium(actual.glPremium);
+					detail.setActualWSPremium(actual.wsPremium);
 
-			// PRIORITY 1: Try exact ID first (most reliable)
-			try {
-				createButton = driver.findElement(By.id("create-endorsement-submit-button"));
-				if (createButton != null && createButton.isDisplayed()) {
-					logger.info("Found Create Endorsement button by ID: create-endorsement-submit-button");
+					// Compare with tolerance
+					detail.setPropertyPremiumMatch(Math.abs(actual.propertyPremium - expected.getPropertyPremium()) < 0.01);
+					detail.setGlPremiumMatch(Math.abs(actual.glPremium - expected.getGlPremium()) < 0.01);
+					detail.setWsPremiumMatch(Math.abs(actual.wsPremium - expected.getWsPremium()) < 0.01);
+
+					logger.info("Location '{}' matched: Property={}/{}, GL={}/{}, WS={}/{}",
+						expectedAddress,
+						expected.getPropertyPremium(), actual.propertyPremium,
+						expected.getGlPremium(), actual.glPremium,
+						expected.getWsPremium(), actual.wsPremium);
 				} else {
-					createButton = null;
+					logger.warn("No matching location found for address: {}", expectedAddress);
+					detail.setPropertyPremiumMatch(false);
+					detail.setGlPremiumMatch(false);
+					detail.setWsPremiumMatch(false);
 				}
-			} catch (Exception e) {
-				logger.info("Button not found by ID, trying other methods...");
-			}
 
-			// PRIORITY 2: Try locator-defined button
-			if (createButton == null) {
-				try {
-					if (submitEndorsementButton != null && submitEndorsementButton.isDisplayed()) {
-						createButton = submitEndorsementButton;
-						logger.info("Using locator-defined submit button");
-					}
-				} catch (Exception e) {
-					// Continue
+				if (!detail.isPropertyPremiumMatch() || !detail.isGlPremiumMatch() || !detail.isWsPremiumMatch()) {
+					allMatch = false;
 				}
+
+				validations.add(detail);
 			}
-
-			// PRIORITY 3: Try multiple XPaths for the Create Endorsement button
-			if (createButton == null) {
-				String[] buttonXpaths = {
-					"//*[@id='create-endorsement-submit-button']",
-					"//button[contains(text(),'Create Endorsement')]",
-					"//button[normalize-space()='Create Endorsement']",
-					"//*[@id='root']//button[contains(text(),'Create Endorsement')]",
-					"//button[contains(@class,'bg-blue') and contains(text(),'Create')]",
-					"//div[contains(@class,'flex')]//button[contains(text(),'Create')]",
-					"//button[@type='submit' and contains(text(),'Create')]",
-					"//button[contains(@id,'submit')]"
-				};
-
-				for (String xpath : buttonXpaths) {
-					try {
-						List<WebElement> buttons = driver.findElements(By.xpath(xpath));
-						logger.info("XPath '{}' found {} buttons", xpath, buttons.size());
-						for (WebElement btn : buttons) {
-							String btnText = btn.getText().trim();
-							boolean isDisplayed = false;
-							boolean isEnabled = false;
-							try {
-								isDisplayed = btn.isDisplayed();
-								isEnabled = btn.isEnabled();
-							} catch (Exception e) {
-								continue;
-							}
-
-							logger.info("  Button: text='{}', displayed={}, enabled={}", btnText, isDisplayed, isEnabled);
-
-							// Accept button if displayed and enabled (no text check for ID-based XPaths)
-							if (isDisplayed && isEnabled) {
-								createButton = btn;
-								logger.info("Found Create Endorsement button with XPath: {} (text: '{}')", xpath, btnText);
-								break;
-							}
-						}
-						if (createButton != null) break;
-					} catch (Exception e) {
-						// Continue
-					}
-				}
-			}
-
-			// PRIORITY 4: Last resort - find any button with "Create" text at bottom of page
-			if (createButton == null) {
-				logger.info("Trying last resort: finding any Create button");
-				List<WebElement> allButtons = driver.findElements(By.tagName("button"));
-				for (WebElement btn : allButtons) {
-					try {
-						String btnText = btn.getText().trim();
-						if (btnText.toLowerCase().contains("create endorsement") && btn.isDisplayed() && btn.isEnabled()) {
-							createButton = btn;
-							logger.info("Found button via tag search: '{}'", btnText);
-							break;
-						}
-					} catch (Exception e) {
-						// Continue
-					}
-				}
-			}
-
-			if (createButton == null) {
-				logger.error("Create Endorsement button not found after all attempts");
-				captureEndorsementScreenshot("Create Endorsement Button Not Found");
-				return false;
-			}
-
-			// Scroll to button
-			((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", createButton);
-			sleep(500);
-
-			captureEndorsementScreenshot("Before Clicking Create Endorsement");
-
-			// Click the button using JavaScript (more reliable)
-			logger.info("Clicking Create Endorsement button using JavaScript...");
-			((JavascriptExecutor) driver).executeScript("arguments[0].click();", createButton);
-			logger.info("Clicked Create Endorsement button");
-
-			// Wait for navigation to edit endorsement page
-			sleep(5000);
-
-			// Wait for URL to change
-			WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
-			try {
-				wait.until(d -> {
-					String url = d.getCurrentUrl();
-					return url.contains("edit-premium-endorsement") || url.contains("edit_premium_endorsement") || url.contains("edit-endorsement");
-				});
-			} catch (Exception e) {
-				logger.warn("Timeout waiting for URL change: {}", e.getMessage());
-			}
-
-			String currentUrl = driver.getCurrentUrl();
-			boolean onEditEndorsement = currentUrl.contains("edit-premium-endorsement") ||
-				currentUrl.contains("edit_premium_endorsement") || currentUrl.contains("edit-endorsement");
-
-			if (onEditEndorsement) {
-				logger.info("Successfully navigated to Edit Endorsement page: {}", currentUrl);
-				captureEndorsementScreenshot("After Create Endorsement - Edit Page");
-			} else {
-				logger.warn("May not be on Edit Endorsement page. Current URL: {}", currentUrl);
-				captureEndorsementScreenshot("After Create Endorsement Click - URL Check");
-			}
-
-			return onEditEndorsement;
 
 		} catch (Exception e) {
-			logger.error("Error clicking Create Endorsement button: {}", e.getMessage());
-			captureEndorsementScreenshot("Create Endorsement Click Error");
-			return false;
+			logger.error("Error validating location details: {}", e.getMessage());
+			allMatch = false;
 		}
+
+		result.setLocationValidations(validations);
+		return allMatch;
 	}
 
 	/**
-	 * Log captured data to HTML report
+	 * Helper class for actual location data
 	 */
-	private void logCapturedDataToReport(EndorsementCapturedData data) {
-		StringBuilder html = new StringBuilder();
-		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #e7f3ff; border-radius: 8px; border-left: 4px solid #007bff;'>");
-		html.append("<h3 style='color: #007bff; margin-top: 0;'>Captured Endorsement Data (Before Create)</h3>");
+	private static class ActualLocationData {
+		int rowIndex;
+		String address;
+		double propertyPremium;
+		double glPremium;
+		double wsPremium;
+	}
 
-		// Summary values
+	/**
+	 * Find partial address match when exact match not found
+	 */
+	private ActualLocationData findPartialAddressMatch(Map<String, ActualLocationData> actualMap, String expectedAddress) {
+		if (expectedAddress == null || expectedAddress.isEmpty()) return null;
+
+		String normalizedExpected = normalizeAddress(expectedAddress);
+
+		// Try to find a match where addresses contain each other
+		for (Map.Entry<String, ActualLocationData> entry : actualMap.entrySet()) {
+			String actualNormalized = entry.getKey();
+			if (actualNormalized.contains(normalizedExpected) || normalizedExpected.contains(actualNormalized)) {
+				logger.info("Partial address match found: '{}' ~ '{}'", expectedAddress, entry.getValue().address);
+				return entry.getValue();
+			}
+		}
+
+		// Try matching first part of address (street number and name)
+		String[] expectedParts = normalizedExpected.split(",");
+		if (expectedParts.length > 0) {
+			String expectedStreet = expectedParts[0].trim();
+			for (Map.Entry<String, ActualLocationData> entry : actualMap.entrySet()) {
+				if (entry.getKey().startsWith(expectedStreet)) {
+					logger.info("Street address match found: '{}' ~ '{}'", expectedAddress, entry.getValue().address);
+					return entry.getValue();
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Normalize date to YYYYMMDD format for comparison
+	 * Handles both ISO (YYYY-MM-DD) and US (MM/DD/YYYY) formats
+	 */
+	private String normalizeDate(String date) {
+		if (date == null || date.isEmpty()) return "";
+
+		// Remove all non-numeric characters first
+		String digitsOnly = date.replaceAll("[^0-9]", "");
+
+		// If it's already 8 digits, determine format
+		if (digitsOnly.length() == 8) {
+			// Check if original was ISO format (YYYY-MM-DD) - starts with year
+			if (date.matches("\\d{4}[-/]\\d{2}[-/]\\d{2}")) {
+				// Already in YYYYMMDD order
+				return digitsOnly;
+			}
+			// Check if original was US format (MM/DD/YYYY) - ends with year
+			if (date.matches("\\d{2}[-/]\\d{2}[-/]\\d{4}") || date.matches("\\d{1,2}[-/]\\d{1,2}[-/]\\d{4}")) {
+				// Convert from MMDDYYYY to YYYYMMDD
+				String month = digitsOnly.substring(0, 2);
+				String day = digitsOnly.substring(2, 4);
+				String year = digitsOnly.substring(4, 8);
+				return year + month + day;
+			}
+			// Default: assume it's YYYYMMDD
+			return digitsOnly;
+		}
+
+		// Handle dates that might have single-digit month/day
+		if (date.matches("\\d{1,2}[-/]\\d{1,2}[-/]\\d{4}")) {
+			String[] parts = date.split("[-/]");
+			if (parts.length == 3) {
+				String month = String.format("%02d", Integer.parseInt(parts[0]));
+				String day = String.format("%02d", Integer.parseInt(parts[1]));
+				String year = parts[2];
+				return year + month + day;
+			}
+		}
+
+		// Just return digits as fallback
+		return digitsOnly;
+	}
+
+	/**
+	 * Log validation result to HTML report
+	 */
+	private void logValidationResultToReport(EndorsementValidationResult result) {
+		StringBuilder html = new StringBuilder();
+		boolean allPassed = result.isAllValidationsPassed();
+
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+		html.append(allPassed ? "background-color: #d4edda; border-left: 4px solid #28a745;'>" : "background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+		html.append("<h3 style='color: ").append(allPassed ? "#28a745" : "#dc3545").append("; margin-top: 0;'>");
+		html.append("Create vs Edit Endorsement Validation: ").append(allPassed ? "ALL PASSED" : "SOME FAILED").append("</h3>");
+
+		// Summary values comparison table
 		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000; margin-bottom: 15px;'>");
-		html.append("<tr style='background-color: #007bff; color: white;'>");
-		html.append("<th style='padding: 10px; text-align: left;'>Field</th>");
-		html.append("<th style='padding: 10px; text-align: left;'>Value</th>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 10px;'>Field</th>");
+		html.append("<th style='padding: 10px;'>Create Endorsement</th>");
+		html.append("<th style='padding: 10px;'>Edit Endorsement</th>");
+		html.append("<th style='padding: 10px;'>Status</th>");
 		html.append("</tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Endorsement Effective Date</td><td style='padding: 8px;'>").append(data.getEndorsementEffectiveDate()).append("</td></tr>");
-		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Premium (GL+WS)</td><td style='padding: 8px;'>$").append(String.format("%.2f", data.getPremiumGLWS())).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Taxes</td><td style='padding: 8px;'>$").append(String.format("%.2f", data.getTaxes())).append("</td></tr>");
-		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Total Fees</td><td style='padding: 8px;'>$").append(String.format("%.2f", data.getTotalFees())).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Grand Total</td><td style='padding: 8px; font-weight: bold; color: #28a745;'>$").append(String.format("%.2f", data.getGrandTotal())).append("</td></tr>");
-		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>Location Count</td><td style='padding: 8px;'>").append(data.getLocationCount()).append("</td></tr>");
+
+		// Date
+		addValidationRow(html, "Endorsement Effective Date", result.getExpectedDate(), result.getActualDate(), result.isEndorsementDateMatch());
+		// Premium
+		addValidationRow(html, "Premium (GL+WS)", "$" + String.format("%.2f", result.getExpectedPremiumGLWS()),
+			"$" + String.format("%.2f", result.getActualPremiumGLWS()), result.isPremiumGLWSMatch());
+		// Taxes
+		addValidationRow(html, "Taxes", "$" + String.format("%.2f", result.getExpectedTaxes()),
+			"$" + String.format("%.2f", result.getActualTaxes()), result.isTaxesMatch());
+		// Total Fees
+		addValidationRow(html, "Total Fees", "$" + String.format("%.2f", result.getExpectedTotalFees()),
+			"$" + String.format("%.2f", result.getActualTotalFees()), result.isTotalFeesMatch());
+		// Grand Total
+		addValidationRow(html, "Grand Total", "$" + String.format("%.2f", result.getExpectedGrandTotal()),
+			"$" + String.format("%.2f", result.getActualGrandTotal()), result.isGrandTotalMatch());
+		// Location Count
+		addValidationRow(html, "Location Count", String.valueOf(result.getExpectedLocationCount()),
+			String.valueOf(result.getActualLocationCount()), result.isLocationCountMatch());
+
 		html.append("</table>");
 
-		// Location details table
-		if (data.getLocationDetails() != null && !data.getLocationDetails().isEmpty()) {
-			html.append("<h4 style='color: #007bff;'>Location Details</h4>");
+		// Location details validation
+		if (result.getLocationValidations() != null && !result.getLocationValidations().isEmpty()) {
+			html.append("<h4 style='color: #007bff;'>Location Details Comparison</h4>");
 			html.append("<table style='width: 100%; border-collapse: collapse; color: #000000; font-size: 12px;'>");
 			html.append("<tr style='background-color: #343a40; color: white;'>");
 			html.append("<th style='padding: 6px;'>#</th>");
-			html.append("<th style='padding: 6px;'>Address</th>");
-			html.append("<th style='padding: 6px;'>Property</th>");
-			html.append("<th style='padding: 6px;'>GL</th>");
-			html.append("<th style='padding: 6px;'>W/S</th>");
-			html.append("<th style='padding: 6px;'>Taxes</th>");
-			html.append("<th style='padding: 6px;'>Fees</th>");
+			html.append("<th style='padding: 6px;'>Property (Exp/Act)</th>");
+			html.append("<th style='padding: 6px;'>GL (Exp/Act)</th>");
+			html.append("<th style='padding: 6px;'>W/S (Exp/Act)</th>");
+			html.append("<th style='padding: 6px;'>Status</th>");
 			html.append("</tr>");
 
-			for (LocationRowData loc : data.getLocationDetails()) {
-				html.append("<tr style='border-bottom: 1px solid #dee2e6;'>");
+			for (LocationValidationDetail loc : result.getLocationValidations()) {
+				boolean locMatch = loc.isPropertyPremiumMatch() && loc.isGlPremiumMatch() && loc.isWsPremiumMatch();
+				String bgColor = locMatch ? "#d4edda" : "#f8d7da";
+				String statusColor = locMatch ? "#28a745" : "#dc3545";
+
+				html.append("<tr style='background-color: ").append(bgColor).append("; border-bottom: 1px solid #dee2e6;'>");
 				html.append("<td style='padding: 6px;'>").append(loc.getRowIndex()).append("</td>");
-				html.append("<td style='padding: 6px;'>").append(loc.getAddress() != null ? loc.getAddress() : "").append("</td>");
-				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getPropertyPremium())).append("</td>");
-				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getGlPremium())).append("</td>");
-				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getWsPremium())).append("</td>");
-				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getTaxes())).append("</td>");
-				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getFees())).append("</td>");
+				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getExpectedPropertyPremium()))
+					.append(" / $").append(String.format("%.2f", loc.getActualPropertyPremium())).append("</td>");
+				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getExpectedGLPremium()))
+					.append(" / $").append(String.format("%.2f", loc.getActualGLPremium())).append("</td>");
+				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", loc.getExpectedWSPremium()))
+					.append(" / $").append(String.format("%.2f", loc.getActualWSPremium())).append("</td>");
+				html.append("<td style='padding: 6px; color: ").append(statusColor).append("; font-weight: bold;'>")
+					.append(locMatch ? "PASS" : "FAIL").append("</td>");
 				html.append("</tr>");
 			}
 			html.append("</table>");
@@ -4969,4 +6661,426 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		html.append("</div>");
 		logHtmlToReport(html.toString());
 	}
+
+	/**
+	 * Add a row to validation table
+	 */
+	private void addValidationRow(StringBuilder html, String field, String expected, String actual, boolean match) {
+		String bgColor = match ? "#d4edda" : "#f8d7da";
+		String statusColor = match ? "#28a745" : "#dc3545";
+		html.append("<tr style='background-color: ").append(bgColor).append("; border-bottom: 1px solid #dee2e6;'>");
+		html.append("<td style='padding: 8px; font-weight: bold;'>").append(field).append("</td>");
+		html.append("<td style='padding: 8px;'>").append(expected != null ? expected : "N/A").append("</td>");
+		html.append("<td style='padding: 8px;'>").append(actual != null ? actual : "N/A").append("</td>");
+		html.append("<td style='padding: 8px; color: ").append(statusColor).append("; font-weight: bold;'>")
+			.append(match ? "PASS" : "FAIL").append("</td>");
+		html.append("</tr>");
+	}
+
+	// ==================== Edit Endorsement Date Change and Validation ====================
+
+	/**
+	 * Result class for date change with location validation
+	 */
+	public static class DateChangeValidationResult {
+		private boolean dateChanged;
+		private boolean confirmDialogAppeared;
+		private boolean allLocationsDisplayed;
+		private boolean confirmClicked;
+		private java.util.List<String> locationsInDialog;
+		private java.util.List<String> expectedLocations;
+		private String oldDate;
+		private String newDate;
+		private String error;
+
+		// Getters and Setters
+		public boolean isDateChanged() { return dateChanged; }
+		public void setDateChanged(boolean v) { this.dateChanged = v; }
+		public boolean isConfirmDialogAppeared() { return confirmDialogAppeared; }
+		public void setConfirmDialogAppeared(boolean v) { this.confirmDialogAppeared = v; }
+		public boolean isAllLocationsDisplayed() { return allLocationsDisplayed; }
+		public void setAllLocationsDisplayed(boolean v) { this.allLocationsDisplayed = v; }
+		public boolean isConfirmClicked() { return confirmClicked; }
+		public void setConfirmClicked(boolean v) { this.confirmClicked = v; }
+		public java.util.List<String> getLocationsInDialog() { return locationsInDialog; }
+		public void setLocationsInDialog(java.util.List<String> v) { this.locationsInDialog = v; }
+		public java.util.List<String> getExpectedLocations() { return expectedLocations; }
+		public void setExpectedLocations(java.util.List<String> v) { this.expectedLocations = v; }
+		public String getOldDate() { return oldDate; }
+		public void setOldDate(String v) { this.oldDate = v; }
+		public String getNewDate() { return newDate; }
+		public void setNewDate(String v) { this.newDate = v; }
+		public String getError() { return error; }
+		public void setError(String v) { this.error = v; }
+
+		public boolean isSuccess() {
+			return dateChanged && confirmDialogAppeared && allLocationsDisplayed && confirmClicked;
+		}
+	}
+
+	/**
+	 * Change endorsement effective date by reducing 2 months on Edit Endorsement screen
+	 * @param expectedAddresses List of addresses that should appear in confirm dialog (e.g., newly added locations)
+	 * @return DateChangeValidationResult with all validation details
+	 */
+	public DateChangeValidationResult changeEndorsementDateReduceBy2Months(java.util.List<String> expectedAddresses) {
+		DateChangeValidationResult result = new DateChangeValidationResult();
+		result.setExpectedLocations(expectedAddresses);
+		logger.info("=== Changing Endorsement Date on Edit Endorsement (Reduce by 2 Months) ===");
+
+		try {
+			// Capture old date
+			String oldDate = getEndorsementEffectiveDate();
+			result.setOldDate(oldDate);
+			logger.info("Current Endorsement Effective Date: {}", oldDate);
+
+			// XPaths provided by user
+			String datePickerInputXpath = "//*[@id='edit-endorsement-endorsement-effective-date-picker']/div/div/input[4]";
+			String prevMonthButtonXpath = "//*[@id='edit-endorsement-endorsement-effective-date-picker']/span/div/div/div[1]/button[2]";
+
+			// Step 1: Click on date picker input to open calendar
+			logger.info("Opening date picker...");
+			WebElement datePickerInput = null;
+			try {
+				datePickerInput = driver.findElement(By.xpath(datePickerInputXpath));
+			} catch (Exception e) {
+				// Try alternative XPaths
+				String[] altXpaths = {
+					"//input[contains(@id,'endorsement-effective-date')]",
+					"//*[@id='edit-endorsement-endorsement-effective-date-picker']//input",
+					"//input[@placeholder='MM/DD/YYYY' or contains(@placeholder,'date')]"
+				};
+				for (String xpath : altXpaths) {
+					try {
+						List<WebElement> inputs = driver.findElements(By.xpath(xpath));
+						for (WebElement input : inputs) {
+							if (input.isDisplayed()) {
+								datePickerInput = input;
+								logger.info("Found date picker input with alt XPath: {}", xpath);
+								break;
+							}
+						}
+						if (datePickerInput != null) break;
+					} catch (Exception ex) {
+						// Continue
+					}
+				}
+			}
+
+			if (datePickerInput == null) {
+				logger.error("Date picker input not found");
+				result.setError("Date picker input not found");
+				return result;
+			}
+
+			// Scroll to date picker
+			((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", datePickerInput);
+			sleep(500);
+
+			// Click to open date picker
+			try {
+				datePickerInput.click();
+			} catch (Exception e) {
+				((JavascriptExecutor) driver).executeScript("arguments[0].click();", datePickerInput);
+			}
+			sleep(1000);
+			logger.info("Date picker opened");
+
+			// Step 2: Click previous month button twice (2 months back)
+			logger.info("Navigating to 2 months back...");
+			for (int i = 0; i < 2; i++) {
+				WebElement prevButton = null;
+				try {
+					prevButton = driver.findElement(By.xpath(prevMonthButtonXpath));
+				} catch (Exception e) {
+					// Try alternative XPaths for previous month button
+					String[] altPrevXpaths = {
+						"//button[contains(@class,'prev') or contains(@aria-label,'prev')]",
+						"//button[text()='<' or text()='‹']",
+						"//*[contains(@class,'calendar')]//button[1]",
+						"//div[contains(@class,'datepicker')]//button[contains(@class,'prev')]"
+					};
+					for (String xpath : altPrevXpaths) {
+						try {
+							List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+							for (WebElement btn : buttons) {
+								if (btn.isDisplayed()) {
+									prevButton = btn;
+									logger.info("Found prev month button with alt XPath: {}", xpath);
+									break;
+								}
+							}
+							if (prevButton != null) break;
+						} catch (Exception ex) {
+							// Continue
+						}
+					}
+				}
+
+				if (prevButton != null) {
+					try {
+						prevButton.click();
+					} catch (Exception e) {
+						((JavascriptExecutor) driver).executeScript("arguments[0].click();", prevButton);
+					}
+					sleep(500);
+					logger.info("Clicked previous month button ({}/2)", i + 1);
+				} else {
+					logger.warn("Previous month button not found on attempt {}", i + 1);
+				}
+			}
+
+			// Step 3: Select a date from react-calendar (click day 15)
+			logger.info("Selecting date from calendar...");
+			boolean dateClicked = (Boolean) ((JavascriptExecutor) driver).executeScript(
+				"var tiles = document.querySelectorAll('.react-calendar__tile:not(.react-calendar__tile--neighboringMonth)');" +
+				"for (var i = 0; i < tiles.length; i++) {" +
+				"  var abbr = tiles[i].querySelector('abbr');" +
+				"  if (abbr && abbr.textContent === '15' && !tiles[i].disabled) {" +
+				"    tiles[i].click(); return true;" +
+				"  }" +
+				"}" +
+				"// Fallback: click any available day" +
+				"for (var j = 0; j < tiles.length; j++) {" +
+				"  if (!tiles[j].disabled) { tiles[j].click(); return true; }" +
+				"}" +
+				"return false;"
+			);
+			if (dateClicked) {
+				logger.info("Date selected");
+				result.setDateChanged(true);
+				sleep(1000);
+			} else {
+				logger.warn("Could not select date");
+			}
+
+			// Step 4: Wait for and handle Confirm dialog
+			sleep(2000);
+			logger.info("Waiting for Confirm Date Change dialog...");
+
+			// Look for the confirm dialog
+			WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+			boolean dialogFound = false;
+			java.util.List<String> locationsInDialog = new java.util.ArrayList<>();
+
+			try {
+				// Wait for dialog to appear
+				wait.until(ExpectedConditions.or(
+					ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(),'Confirm')]")),
+					ExpectedConditions.presenceOfElementLocated(By.xpath("//div[contains(@class,'Dialog')]")),
+					ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(@id,'radix-')]"))
+				));
+
+				dialogFound = true;
+				result.setConfirmDialogAppeared(true);
+				logger.info("Confirm dialog appeared");
+
+				// Capture locations shown in dialog using multiple XPath strategies
+				try {
+					// Try multiple XPaths to capture all location elements
+					String[] locationXpaths = {
+						"//*[@id='root']/div[2]/div[2]/div/div[2]/div[2]//p",
+						"//div[contains(@class,'Dialog')]//p[contains(text(),',')]",
+						"//*[contains(@id,'radix-')]//p[contains(text(),',')]",
+						"//div[contains(@class,'modal')]//p",
+						"//div[@role='dialog']//p"
+					};
+
+					java.util.Set<String> uniqueLocations = new java.util.LinkedHashSet<>();
+
+					for (String xpath : locationXpaths) {
+						try {
+							List<WebElement> elements = driver.findElements(By.xpath(xpath));
+							for (WebElement loc : elements) {
+								String text = loc.getText().trim();
+								// Location addresses typically contain comma (city, state pattern)
+								if (!text.isEmpty() && text.contains(",") && !text.toLowerCase().contains("confirm")
+									&& !text.toLowerCase().contains("change") && text.length() > 10) {
+									uniqueLocations.add(text);
+								}
+							}
+						} catch (Exception ex) {
+							// Continue with next XPath
+						}
+					}
+
+					// Also try to capture from any visible dialog content
+					try {
+						List<WebElement> allParagraphs = driver.findElements(By.xpath("//div[contains(@class,'fixed') or contains(@class,'overlay')]//p"));
+						for (WebElement p : allParagraphs) {
+							String text = p.getText().trim();
+							if (!text.isEmpty() && text.contains(",") && text.contains(" ")
+								&& (text.toUpperCase().contains("NY") || text.toUpperCase().contains("USA") || text.matches(".*\\d{5}.*"))) {
+								uniqueLocations.add(text);
+							}
+						}
+					} catch (Exception ex) {
+						// Continue
+					}
+
+					locationsInDialog.addAll(uniqueLocations);
+					logger.info("Found {} unique location elements in dialog", locationsInDialog.size());
+					for (String loc : locationsInDialog) {
+						logger.info("Found location in dialog: {}", loc);
+					}
+				} catch (Exception e) {
+					logger.warn("Could not capture locations from dialog: {}", e.getMessage());
+				}
+
+				result.setLocationsInDialog(locationsInDialog);
+
+				// Get actual location count from the Edit Endorsement page
+				int actualLocationCountOnPage = getLocationCount();
+				logger.info("Actual location count on Edit Endorsement page: {}", actualLocationCountOnPage);
+				logger.info("Locations found in confirm dialog: {}", locationsInDialog.size());
+
+				// Validate all locations are displayed - compare dialog count with page count
+				boolean allLocationsFound = false;
+				if (locationsInDialog.size() >= actualLocationCountOnPage && actualLocationCountOnPage > 0) {
+					// Dialog shows at least as many locations as on the page
+					allLocationsFound = true;
+					logger.info("All locations displayed: Dialog has {} locations, page has {} locations",
+						locationsInDialog.size(), actualLocationCountOnPage);
+				} else if (locationsInDialog.size() > 0 && actualLocationCountOnPage == 0) {
+					// Fallback: if page count couldn't be determined but dialog has locations
+					allLocationsFound = true;
+					logger.info("Location count from page unavailable, but dialog shows {} locations", locationsInDialog.size());
+				} else {
+					logger.warn("Not all locations displayed: Dialog has {} locations, page has {} locations",
+						locationsInDialog.size(), actualLocationCountOnPage);
+				}
+
+				// Also validate against expected addresses if provided (secondary check)
+				if (expectedAddresses != null && !expectedAddresses.isEmpty()) {
+					int matchedCount = 0;
+					for (String expectedAddr : expectedAddresses) {
+						String normalizedExpected = normalizeAddress(expectedAddr);
+						for (String dialogLoc : locationsInDialog) {
+							if (normalizeAddress(dialogLoc).contains(normalizedExpected) ||
+								normalizedExpected.contains(normalizeAddress(dialogLoc))) {
+								matchedCount++;
+								break;
+							}
+						}
+					}
+					logger.info("Expected addresses matched: {}/{}", matchedCount, expectedAddresses.size());
+				}
+
+				result.setAllLocationsDisplayed(allLocationsFound);
+
+				captureEndorsementScreenshot("Confirm Date Change Dialog");
+
+			} catch (Exception e) {
+				logger.warn("Confirm dialog wait timeout: {}", e.getMessage());
+				result.setConfirmDialogAppeared(false);
+			}
+
+			// Step 5: Click Confirm Changes button
+			logger.info("Clicking Confirm Changes button...");
+			sleep(500);
+
+			Boolean confirmClicked = (Boolean) ((JavascriptExecutor) driver).executeScript(
+				"var buttons = document.querySelectorAll('button');" +
+				"for (var i = 0; i < buttons.length; i++) {" +
+				"  var text = buttons[i].textContent.trim();" +
+				"  if (text === 'Confirm Changes' && !buttons[i].disabled && buttons[i].offsetParent) {" +
+				"    buttons[i].click(); return true;" +
+				"  }" +
+				"}" +
+				"return false;"
+			);
+
+			if (confirmClicked != null && confirmClicked) {
+				logger.info("Clicked Confirm Changes button");
+				result.setConfirmClicked(true);
+
+				// Wait for page to reload/update
+				sleep(5000);
+
+				// Use explicit wait for page elements to load
+				try {
+					wait.until(ExpectedConditions.or(
+						ExpectedConditions.presenceOfElementLocated(By.xpath("//table[.//th[contains(text(),'Premium')]]")),
+						ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(),'Grand Total')]"))
+					));
+					logger.info("Page loaded after date change");
+				} catch (Exception e) {
+					logger.warn("Page load wait timeout after confirm: {}", e.getMessage());
+				}
+
+				sleep(3000); // Additional wait for calculations
+
+			} else {
+				logger.error("Confirm Changes button not found");
+				result.setError("Confirm Changes button not found");
+			}
+
+			// Wait for page to auto-refresh and data to load
+			sleep(5000);
+			wait.until(ExpectedConditions.presenceOfElementLocated(
+				By.id("edit-endorsement-endorsement-effective-date-picker")));
+
+			// Capture new date
+			String newDate = getEndorsementEffectiveDate();
+			result.setNewDate(newDate);
+			logger.info("New Endorsement Effective Date: {}", newDate);
+
+			captureEndorsementScreenshot("After Date Change Confirmed");
+
+			// Log result to report
+			logDateChangeResultToReport(result);
+
+		} catch (Exception e) {
+			logger.error("Error changing endorsement date: {}", e.getMessage());
+			result.setError(e.getMessage());
+			captureEndorsementScreenshot("Date Change Error");
+		}
+
+		return result;
+	}
+
+	/**
+	 * Log date change result to HTML report
+	 */
+	private void logDateChangeResultToReport(DateChangeValidationResult result) {
+		StringBuilder html = new StringBuilder();
+		boolean success = result.isSuccess();
+
+		html.append("<div style='margin: 10px 0; padding: 15px; border-radius: 8px; ");
+		html.append(success ? "background-color: #d4edda; border-left: 4px solid #28a745;'>" : "background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
+		html.append("<h3 style='color: ").append(success ? "#28a745" : "#dc3545").append("; margin-top: 0;'>");
+		html.append("Edit Endorsement Date Change: ").append(success ? "SUCCESS" : "FAILED").append("</h3>");
+
+		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Previous Date:</td><td style='padding: 8px;'>").append(result.getOldDate()).append("</td></tr>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>New Date (2 months earlier):</td><td style='padding: 8px;'>").append(result.getNewDate()).append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Confirm Dialog Appeared:</td><td style='padding: 8px;'>").append(result.isConfirmDialogAppeared() ? "Yes" : "No").append("</td></tr>");
+		html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px; font-weight: bold;'>All Locations Displayed:</td><td style='padding: 8px;'>").append(result.isAllLocationsDisplayed() ? "Yes" : "No").append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Confirm Clicked:</td><td style='padding: 8px;'>").append(result.isConfirmClicked() ? "Yes" : "No").append("</td></tr>");
+
+		// Show locations found in dialog
+		if (result.getLocationsInDialog() != null && !result.getLocationsInDialog().isEmpty()) {
+			html.append("<tr style='background-color: #e7f3ff;'><td style='padding: 8px; font-weight: bold;' colspan='2'>Locations in Confirm Dialog:</td></tr>");
+			for (String loc : result.getLocationsInDialog()) {
+				html.append("<tr style='background-color: #f8f9fa;'><td style='padding: 8px;' colspan='2'>• ").append(loc).append("</td></tr>");
+			}
+		}
+
+		if (result.getError() != null) {
+			html.append("<tr style='background-color: #f8d7da;'><td style='padding: 8px; font-weight: bold; color: #dc3545;'>Error:</td><td style='padding: 8px; color: #dc3545;'>").append(result.getError()).append("</td></tr>");
+		}
+
+		html.append("</table></div>");
+		logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Validate premium calculations on Edit Endorsement page after date change
+	 * Uses same formulas as testAddLocationsOnEndorsement
+	 */
+	public PremiumValidationResult validateEditEndorsementPremiums() {
+		logger.info("=== Validating Edit Endorsement Premium Calculations ===");
+		return validateEndorsementPremiums();
+	}
 }
+

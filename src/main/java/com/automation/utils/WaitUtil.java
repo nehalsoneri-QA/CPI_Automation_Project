@@ -312,11 +312,191 @@ public class WaitUtil {
             .until(ExpectedConditions.numberOfElementsToBeMoreThan(locator, number));
     }
 
+    // ==================== Page Stability Waits ====================
+
+    /**
+     * Wait for page to be stable (document ready + no active AJAX + no animations)
+     * Use this as a replacement for arbitrary Thread.sleep() calls
+     */
+    public void waitForPageStability() {
+        waitForPageStability(defaultTimeout);
+    }
+
+    /**
+     * Wait for page to be stable with custom timeout
+     */
+    public void waitForPageStability(long timeoutInSeconds) {
+        logger.debug("Waiting for page stability");
+        waitForPageLoad();
+        waitForAjaxComplete();
+        waitForAnimationsComplete();
+    }
+
+    /**
+     * Wait for all AJAX requests to complete (jQuery + vanilla XHR)
+     */
+    public void waitForAjaxComplete() {
+        logger.debug("Waiting for AJAX to complete");
+        new WebDriverWait(driver, Duration.ofSeconds(defaultTimeout))
+            .until(webDriver -> {
+                try {
+                    // Check jQuery AJAX
+                    Boolean jQueryComplete = (Boolean) ((JavascriptExecutor) webDriver)
+                        .executeScript("return (typeof jQuery === 'undefined' || jQuery.active === 0)");
+                    // Check vanilla XHR via custom tracking (if available)
+                    Boolean xhrComplete = (Boolean) ((JavascriptExecutor) webDriver)
+                        .executeScript("return (typeof window.activeXHR === 'undefined' || window.activeXHR === 0)");
+                    return jQueryComplete && xhrComplete;
+                } catch (Exception e) {
+                    return true;
+                }
+            });
+    }
+
+    /**
+     * Wait for CSS animations and transitions to complete
+     */
+    public void waitForAnimationsComplete() {
+        logger.debug("Waiting for animations to complete");
+        try {
+            new WebDriverWait(driver, Duration.ofSeconds(5))
+                .until(webDriver -> {
+                    try {
+                        String script = "return document.getAnimations ? document.getAnimations().length === 0 : true";
+                        return (Boolean) ((JavascriptExecutor) webDriver).executeScript(script);
+                    } catch (Exception e) {
+                        return true;
+                    }
+                });
+        } catch (Exception e) {
+            // Animations API may not be supported, continue
+            logger.debug("Animation check skipped: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Wait for element to be stable (no attribute changes for a short period)
+     */
+    public boolean waitForElementStable(By locator) {
+        return waitForElementStable(locator, 500);
+    }
+
+    /**
+     * Wait for element to be stable with custom stability period in milliseconds
+     */
+    public boolean waitForElementStable(By locator, long stabilityPeriodMs) {
+        logger.debug("Waiting for element to be stable: {}", locator);
+        try {
+            WebElement element = waitForVisible(locator);
+            String previousHtml = element.getAttribute("outerHTML");
+
+            // Wait for stability period
+            try {
+                Thread.sleep(stabilityPeriodMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+
+            // Check if element is still the same
+            String currentHtml = element.getAttribute("outerHTML");
+            return previousHtml.equals(currentHtml);
+        } catch (Exception e) {
+            logger.warn("Element stability check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Wait for loading overlay/spinner to disappear
+     */
+    public void waitForLoadingOverlayToDisappear() {
+        logger.debug("Waiting for loading overlay to disappear");
+        By[] commonLoaders = {
+            By.cssSelector(".loading"),
+            By.cssSelector(".loader"),
+            By.cssSelector(".spinner"),
+            By.cssSelector("[class*='loading']"),
+            By.cssSelector("[class*='spinner']"),
+            By.xpath("//div[contains(@class,'bg-opacity')]")
+        };
+
+        for (By loader : commonLoaders) {
+            try {
+                List<WebElement> elements = driver.findElements(loader);
+                if (!elements.isEmpty()) {
+                    waitForInvisible(loader, 10);
+                }
+            } catch (Exception e) {
+                // Continue checking other loaders
+            }
+        }
+    }
+
+    /**
+     * Wait for element text to be non-empty
+     */
+    public boolean waitForTextNotEmpty(By locator) {
+        return waitForTextNotEmpty(locator, defaultTimeout);
+    }
+
+    /**
+     * Wait for element text to be non-empty with custom timeout
+     */
+    public boolean waitForTextNotEmpty(By locator, long timeoutInSeconds) {
+        logger.debug("Waiting for text to be non-empty: {}", locator);
+        return new WebDriverWait(driver, Duration.ofSeconds(timeoutInSeconds))
+            .until(webDriver -> {
+                try {
+                    WebElement element = webDriver.findElement(locator);
+                    String text = element.getText();
+                    return text != null && !text.trim().isEmpty();
+                } catch (Exception e) {
+                    return false;
+                }
+            });
+    }
+
+    /**
+     * Wait for element value attribute to be non-empty (for input fields)
+     */
+    public boolean waitForValueNotEmpty(By locator) {
+        logger.debug("Waiting for value to be non-empty: {}", locator);
+        return new WebDriverWait(driver, Duration.ofSeconds(defaultTimeout))
+            .until(webDriver -> {
+                try {
+                    WebElement element = webDriver.findElement(locator);
+                    String value = element.getAttribute("value");
+                    return value != null && !value.trim().isEmpty();
+                } catch (Exception e) {
+                    return false;
+                }
+            });
+    }
+
+    /**
+     * Wait for element count to change (useful after adding/removing items)
+     */
+    public boolean waitForElementCountChange(By locator, int previousCount) {
+        logger.debug("Waiting for element count to change from {}: {}", previousCount, locator);
+        return new WebDriverWait(driver, Duration.ofSeconds(defaultTimeout))
+            .until(webDriver -> {
+                try {
+                    int currentCount = webDriver.findElements(locator).size();
+                    return currentCount != previousCount;
+                } catch (Exception e) {
+                    return false;
+                }
+            });
+    }
+
     // ==================== Static Wait (use sparingly) ====================
 
     /**
-     * Hard wait - use only when absolutely necessary
+     * Hard wait - use only when absolutely necessary (e.g., third-party integrations)
+     * @deprecated Prefer explicit waits like waitForPageStability(), waitForVisible(), etc.
      */
+    @Deprecated
     public void hardWait(long milliseconds) {
         logger.warn("Using hard wait for {} ms - consider using explicit wait", milliseconds);
         try {

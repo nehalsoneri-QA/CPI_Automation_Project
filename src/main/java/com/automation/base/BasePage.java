@@ -399,11 +399,8 @@ public abstract class BasePage {
         WebElement element = waitForPresence(locator);
         String originalStyle = element.getAttribute("style");
         jsExecutor.executeScript("arguments[0].setAttribute('style', 'background: yellow; border: 2px solid red;');", element);
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Use explicit wait for visual feedback instead of Thread.sleep
+        waitForPageStability();
         jsExecutor.executeScript("arguments[0].setAttribute('style', arguments[1]);", element, originalStyle);
     }
 
@@ -565,10 +562,71 @@ public abstract class BasePage {
     // ==================== Common Utility Methods ====================
 
     /**
-     * Thread sleep - use sparingly, prefer explicit waits
+     * Wait for page to be stable (document ready + AJAX complete + animations done)
+     * Use this instead of Thread.sleep() for waiting after actions
+     */
+    protected void waitForPageStability() {
+        logger.debug("Waiting for page stability");
+        // Wait for document ready state
+        wait.until(webDriver -> jsExecutor.executeScript("return document.readyState").equals("complete"));
+        // Wait for any AJAX calls to complete
+        try {
+            wait.until(webDriver -> {
+                try {
+                    return (Boolean) jsExecutor.executeScript(
+                        "return (typeof jQuery === 'undefined' || jQuery.active === 0)");
+                } catch (Exception e) {
+                    return true;
+                }
+            });
+        } catch (Exception e) {
+            // jQuery not present or other issue, continue
+        }
+        // Wait for animations to complete
+        try {
+            new WebDriverWait(driver, Duration.ofSeconds(3)).until(webDriver -> {
+                try {
+                    return (Boolean) jsExecutor.executeScript(
+                        "return document.getAnimations ? document.getAnimations().length === 0 : true");
+                } catch (Exception e) {
+                    return true;
+                }
+            });
+        } catch (Exception e) {
+            // Animations API not supported, continue
+        }
+    }
+
+    /**
+     * Wait for loading overlay/spinner to disappear
+     */
+    protected void waitForLoadingToDisappear() {
+        logger.debug("Waiting for loading overlay to disappear");
+        By[] loaders = {
+            By.cssSelector("[class*='loading']"),
+            By.cssSelector("[class*='spinner']"),
+            By.xpath("//div[contains(@class,'bg-opacity')]")
+        };
+        for (By loader : loaders) {
+            try {
+                List<WebElement> elements = driver.findElements(loader);
+                if (!elements.isEmpty() && elements.get(0).isDisplayed()) {
+                    wait.until(ExpectedConditions.invisibilityOfElementLocated(loader));
+                }
+            } catch (Exception e) {
+                // Continue
+            }
+        }
+    }
+
+    /**
+     * @deprecated Use waitForPageStability() or explicit waits instead
+     * Thread sleep - use only when absolutely necessary
      * @param milliseconds time to sleep
      */
+    @Deprecated
     protected void sleep(long milliseconds) {
+        logger.warn("Using Thread.sleep({}) - consider using explicit waits", milliseconds);
         try {
             Thread.sleep(milliseconds);
         } catch (InterruptedException e) {

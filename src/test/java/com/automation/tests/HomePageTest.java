@@ -4,6 +4,7 @@ import com.automation.base.DriverManager;
 import com.automation.listeners.TestListener;
 import com.automation.pages.HomePage;
 import com.automation.utils.ConfigReader;
+import com.automation.utils.TestWaitHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.WebDriver;
@@ -33,11 +34,13 @@ public class HomePageTest {
 
     private HomePage homePage;
     private WebDriver driver;
+    private TestWaitHelper waitHelper;
 
     @BeforeClass(alwaysRun = true)
     public void initPageObjects() {
         // Get shared driver instance (browser already open from LoginTest)
         driver = DriverManager.getDriver();
+        waitHelper = new TestWaitHelper(driver);
 
         // Set driver reference for TestListener to capture screenshots
         TestListener.setDriver(driver);
@@ -54,7 +57,7 @@ public class HomePageTest {
 
         // Wait for home page to fully load
         homePage.waitForHomePageLoad();
-        sleep(1500);
+        waitHelper.waitForPageStability();
         logger.info("Home Page initialized and ready for testing");
     }
 
@@ -561,13 +564,13 @@ public class HomePageTest {
 
     // ==================== Helper Methods ====================
 
-    // Sleep for specified milliseconds - for user visibility of actions
+    /**
+     * Wait for page stability - replaces Thread.sleep with explicit waits
+     * @param milliseconds ignored - kept for backward compatibility, uses explicit wait instead
+     */
     private void sleep(long milliseconds) {
-        try {
-            Thread.sleep(milliseconds);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Use explicit wait instead of Thread.sleep for more reliable test execution
+        waitHelper.waitForPageStability();
     }
 
     // ==================== Custom Annotation ====================

@@ -1708,40 +1708,77 @@ public class CreateQuotePage extends CreateQuoteLocators {
             logger.info("Looking for Upload File confirmation button");
             WebElement uploadConfirmButton = null;
 
+            // Wait for dialog/modal to appear after file selection
+            sleep(1000);
+
             // XPaths for Upload File confirmation button (dynamic ID like radix-:r12:)
             String[] confirmButtonXpaths = {
-                "//*[contains(@id,'radix-')]/button[1]",
-                "//*[contains(@id,'radix-')]//button[contains(text(),'Upload')]",
+                // Primary button patterns
+                "//button[text()='Upload File']",
+                "//button[normalize-space()='Upload File']",
                 "//button[contains(text(),'Upload File')]",
-                "//button[contains(text(),'Upload') and not(contains(text(),'Quotes'))]",
+                // Radix dialog patterns
+                "//*[contains(@id,'radix-')]//button[text()='Upload File']",
+                "//*[contains(@id,'radix-')]//button[contains(text(),'Upload')]",
+                "//*[contains(@id,'radix-')]/button[1]",
+                // Dialog/modal patterns
                 "//div[contains(@class,'dialog') or contains(@class,'modal')]//button[contains(text(),'Upload')]",
                 "//div[contains(@role,'dialog')]//button[contains(text(),'Upload')]",
-                "//*[contains(@id,'radix-')]/button[contains(text(),'Upload')]",
-                "//button[text()='Upload File']",
-                "//button[normalize-space()='Upload File']"
+                "//div[@role='dialog']//button[text()='Upload File']",
+                // Generic upload button patterns
+                "//button[contains(text(),'Upload') and not(contains(text(),'Quotes'))]",
+                "//button[contains(@class,'primary') or contains(@class,'submit')]//span[contains(text(),'Upload')]/parent::button",
+                "//button[contains(@class,'btn') and contains(text(),'Upload')]",
+                // Form submit patterns
+                "//form//button[@type='submit']",
+                "//form//button[contains(text(),'Upload')]"
             };
 
-            for (String xpath : confirmButtonXpaths) {
-                try {
-                    List<WebElement> buttons = driver.findElements(By.xpath(xpath));
-                    for (WebElement btn : buttons) {
-                        if (btn.isDisplayed() && btn.isEnabled()) {
-                            String btnText = btn.getText().trim();
-                            // Make sure it's the Upload button, not Cancel
-                            if (btnText.toLowerCase().contains("upload") || btnText.isEmpty()) {
-                                uploadConfirmButton = btn;
-                                logger.info("Found Upload File button with XPath: {} (text: '{}')", xpath, btnText);
-                                break;
+            // Try multiple times with small delay
+            for (int attempt = 0; attempt < 3 && uploadConfirmButton == null; attempt++) {
+                if (attempt > 0) {
+                    logger.info("Retry attempt {} to find Upload File button", attempt + 1);
+                    sleep(1000);
+                }
+
+                for (String xpath : confirmButtonXpaths) {
+                    try {
+                        List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+                        for (WebElement btn : buttons) {
+                            if (btn.isDisplayed() && btn.isEnabled()) {
+                                String btnText = btn.getText().trim();
+                                // Make sure it's the Upload button, not Cancel
+                                if (btnText.toLowerCase().contains("upload") || btnText.isEmpty()) {
+                                    uploadConfirmButton = btn;
+                                    logger.info("Found Upload File button with XPath: {} (text: '{}')", xpath, btnText);
+                                    break;
+                                }
                             }
                         }
+                        if (uploadConfirmButton != null) break;
+                    } catch (Exception e) {
+                        logger.debug("Confirm button XPath not found: {}", xpath);
                     }
-                    if (uploadConfirmButton != null) break;
-                } catch (Exception e) {
-                    logger.debug("Confirm button XPath not found: {}", xpath);
                 }
             }
 
+            // Log all visible buttons for debugging if not found
             if (uploadConfirmButton == null) {
+                logger.warn("Upload File button not found. Listing all visible buttons:");
+                try {
+                    List<WebElement> allButtons = driver.findElements(By.xpath("//button"));
+                    for (WebElement btn : allButtons) {
+                        if (btn.isDisplayed()) {
+                            logger.warn("  Button: text='{}', id='{}', class='{}'",
+                                btn.getText().trim(),
+                                btn.getAttribute("id"),
+                                btn.getAttribute("class"));
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Could not list buttons: {}", e.getMessage());
+                }
+
                 logger.error("Upload File confirmation button not found");
                 captureScreenshotToReport("Upload Confirm Button Not Found");
                 return false;
