@@ -7,6 +7,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 
+import com.automation.utils.ConfigReader;
+
 import java.util.HashMap;
 
 // Singleton Driver Manager - maintains single browser instance across all tests
@@ -30,9 +32,21 @@ public class DriverManager {
 
     // Initialize driver
     private static void initializeDriver() {
-        logger.info("Initializing Chrome WebDriver");
+        // Read headless property from system property or config file
+        String headlessStr = System.getProperty("headless",
+        ConfigReader.getInstance().getProperty("headless", "false"));
+        boolean headless = Boolean.parseBoolean(headlessStr);
+
+        logger.info("Initializing Chrome WebDriver (headless={})", headless);
         WebDriverManager.chromedriver().setup();
         ChromeOptions chromeOptions = new ChromeOptions();
+
+        // Add headless mode if enabled
+        if (headless) {
+            chromeOptions.addArguments("--headless=new");
+            logger.info("Running in headless mode");
+        }
+
         chromeOptions.addArguments("--start-maximized");
         chromeOptions.addArguments("--disable-gpu");
         chromeOptions.addArguments("--no-sandbox");
