@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 2. Positive flow (valid credentials from Excel) - runs second, handles reset password
  * URL: https://cpiai-dev.attri.ai/
  */
+@Listeners(TestListener.class)
 public class LoginTest {
 
     protected static final Logger logger = LogManager.getLogger(LoginTest.class);
