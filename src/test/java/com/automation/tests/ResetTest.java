@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Reset Password Test Class
  * Handles the reset password page that appears after successful login
  */
+@Listeners(TestListener.class)
 public class ResetTest {
 
     protected static final Logger logger = LogManager.getLogger(ResetTest.class);

@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 4. Admin User Menu validation
  * URL: https://cpiai-dev.attri.ai/
  */
+@Listeners(TestListener.class)
 public class HomePageTest {
 
     protected static final Logger logger = LogManager.getLogger(HomePageTest.class);
