@@ -15,8 +15,10 @@ import com.automation.utils.ExcelReader;
 import com.automation.utils.TestWaitHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
 import org.testng.annotations.*;
 
 import java.util.List;
@@ -62,6 +64,8 @@ public class CreatePremiumEndorsementTest {
 	private List<Map<String, String>> endorsementLocationData; // Store location data from Excel for pro-rata validation
 	private List<Map<String, String>> editEndorsementLocationData; // Store Edit Endorsement location data for pro-rata validation
 	private int editEndorsementLocationsAdded = 0;
+	private String endorsementPdfPath; // Store endorsement PDF path for comparison with Bind History PDF
+	private List<String> recentlyAddedAddresses; // Store addresses added during endorsement for validation
 
 	// ==================== Setup ====================
 
@@ -1744,6 +1748,8 @@ public class CreatePremiumEndorsementTest {
 			.as("PDF should be downloaded successfully")
 			.isNotNull();
 
+		// Store PDF path for later comparison with Bind History PDF
+		this.endorsementPdfPath = pdfPath;
 		logger.info("PDF downloaded to: {}", pdfPath);
 
 		// Step 2: Parse the PDF
@@ -1824,6 +1830,555 @@ public class CreatePremiumEndorsementTest {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Test 22: Click Update Endorsement button
+	 * - Click Update Endorsement button on Edit Endorsement screen
+	 * - Wait for page to load/process
+	 */
+	@Test(priority = 22, dependsOnMethods = {"testValidatePDFEndorsement"})
+	public void testClickUpdateEndorsementButton() {
+		logger.info("=== Test 22: Click Update Endorsement Button ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Store recently added addresses for later validation
+		recentlyAddedAddresses = new java.util.ArrayList<>();
+		if (editEndorsementLocationData != null) {
+			for (Map<String, String> loc : editEndorsementLocationData) {
+				String address = getAddressValue(loc);
+				if (address != null && !address.isEmpty()) {
+					recentlyAddedAddresses.add(address);
+				}
+			}
+		}
+		logger.info("Stored {} recently added addresses for validation", recentlyAddedAddresses.size());
+
+		// Click Update Endorsement button
+		logger.info("Clicking Update Endorsement button...");
+		boolean updateClicked = editEndorsementPage.clickUpdateEndorsement();
+
+		assertThat(updateClicked)
+			.as("Update Endorsement button should be clicked successfully")
+			.isTrue();
+
+		// Wait for processing
+		sleep(5000);
+		waitHelper.waitAfterNavigation();
+
+		editEndorsementPage.captureEndorsementScreenshot("After Update Endorsement Click");
+		logger.info("Update Endorsement button clicked successfully");
+	}
+
+	/**
+	 * Test 23: Click Bind button after Update Endorsement
+	 * - Click Bind button
+	 * - Wait for navigation to Master Policy page
+	 */
+	@Test(priority = 23, dependsOnMethods = {"testClickUpdateEndorsementButton"})
+	public void testClickBindButtonOnEditEndorsement() {
+		logger.info("=== Test 23: Click Bind Button on Edit Endorsement ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// Click Bind button
+		logger.info("Clicking Bind button...");
+		boolean bindClicked = editEndorsementPage.clickBindButton();
+
+		assertThat(bindClicked)
+			.as("Bind button should be clicked successfully")
+			.isTrue();
+
+		// Wait for navigation
+		sleep(5000);
+		waitHelper.waitAfterNavigation();
+
+		editEndorsementPage.captureEndorsementScreenshot("After Bind Button Click");
+		logger.info("Bind button clicked successfully");
+	}
+
+	/**
+	 * Test 24: Validate Master Policy URL and recently added addresses
+	 * - Validate URL format: https://cpiai-dev.attri.ai/policies/<Policy ID>
+	 * - Validate recently added addresses display on Master Policy page
+	 */
+	@Test(priority = 24, dependsOnMethods = {"testClickBindButtonOnEditEndorsement"})
+	public void testValidateMasterPolicyURL() {
+		logger.info("=== Test 24: Validate Master Policy URL and Addresses ===");
+
+		// Wait for page to fully load and navigation to complete
+		sleep(5000);
+		waitHelper.waitAfterNavigation();
+
+		String currentUrl = driver.getCurrentUrl();
+		logger.info("Current URL after Bind: {}", currentUrl);
+
+		// Check if we're still on edit-premium-endorsement page
+		// If so, we need to extract policy_id and navigate manually
+		String policyIdFromUrl = null;
+
+		if (currentUrl.contains("edit-premium-endorsement")) {
+			logger.info("Still on Edit Premium Endorsement page, extracting policy_id from URL");
+			// Extract policy_id from query params: ?policy_id=1043&quote_id=3541
+			if (currentUrl.contains("policy_id=")) {
+				String[] parts = currentUrl.split("policy_id=");
+				if (parts.length > 1) {
+					policyIdFromUrl = parts[1].split("&")[0];
+					logger.info("Extracted Policy ID: {}", policyIdFromUrl);
+
+					// Navigate to Master Policy page
+					String masterPolicyUrl = "https://cpiai-dev.attri.ai/policies/" + policyIdFromUrl;
+					logger.info("Navigating to Master Policy page: {}", masterPolicyUrl);
+					driver.get(masterPolicyUrl);
+					sleep(3000);
+					waitHelper.waitAfterNavigation();
+					currentUrl = driver.getCurrentUrl();
+				}
+			}
+		} else if (currentUrl.matches("https://cpiai-dev\\.attri\\.ai/policies/[A-Za-z0-9]+.*")) {
+			// Already on Master Policy page
+			policyIdFromUrl = currentUrl.split("/policies/")[1].split("[?#]")[0];
+			logger.info("Already on Master Policy page, Policy ID: {}", policyIdFromUrl);
+		}
+
+		// Validate we're now on Master Policy page
+		assertThat(currentUrl)
+			.as("URL should be Master Policy page format")
+			.contains("/policies/");
+
+		logger.info("Policy ID from URL: {}", policyIdFromUrl);
+
+		// Store policy number for reference
+		if (policyNumber == null || policyNumber.isEmpty()) {
+			policyNumber = policyIdFromUrl;
+		}
+
+		// Initialize Master Policy page if needed
+		if (masterPolicyPage == null) {
+			masterPolicyPage = new MasterPolicyPage(driver);
+		}
+
+		masterPolicyPage.captureScreenshotToReport("Master Policy Page - After Bind");
+
+		// Log validation to report
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;'>");
+		html.append("<h3 style='color: #28a745; margin-bottom: 15px;'>Master Policy URL Validation</h3>");
+		html.append("<p style='color: #28a745;'><strong>URL:</strong> ").append(currentUrl).append("</p>");
+		html.append("<p style='color: #28a745;'><strong>Policy ID:</strong> ").append(policyIdFromUrl).append("</p>");
+
+		// Validate recently added addresses
+		if (recentlyAddedAddresses != null && !recentlyAddedAddresses.isEmpty()) {
+			// Try to click on Locations tab if it exists to see all locations
+			try {
+				WebElement locationsTab = driver.findElement(By.xpath("//button[contains(text(),'Locations') or contains(text(),'Location')]"));
+				((JavascriptExecutor) driver).executeScript("arguments[0].click();", locationsTab);
+				sleep(2000);
+				logger.info("Clicked Locations tab");
+			} catch (Exception e) {
+				logger.info("Locations tab not found or not needed");
+			}
+
+			// Scroll down to load all content
+			((JavascriptExecutor) driver).executeScript("window.scrollTo(0, document.body.scrollHeight);");
+			sleep(1000);
+			((JavascriptExecutor) driver).executeScript("window.scrollTo(0, 0);");
+			sleep(1000);
+
+			html.append("<h4 style='color: #28a745; margin-top: 15px;'>Recently Added Addresses Validation</h4>");
+			html.append("<table style='width: 100%; border-collapse: collapse; font-size: 12px;'>");
+			html.append("<tr style='background-color: #343a40; color: white;'>");
+			html.append("<th style='padding: 8px;'>Address</th>");
+			html.append("<th style='padding: 8px;'>Found on Page</th></tr>");
+
+			boolean allAddressesFound = true;
+			String pageSource = driver.getPageSource();
+
+			for (String address : recentlyAddedAddresses) {
+				// Normalize address for comparison - try multiple parts
+				String[] addressParts = address.split(",");
+				String streetPart = addressParts[0].trim();
+				// Also try just the street number and name
+				String[] streetWords = streetPart.split(" ");
+				String shortStreet = streetWords.length > 2 ? streetWords[0] + " " + streetWords[1] : streetPart;
+
+				boolean found = pageSource.contains(streetPart) || pageSource.contains(shortStreet);
+
+				// Also try case-insensitive search
+				if (!found) {
+					found = pageSource.toLowerCase().contains(streetPart.toLowerCase()) ||
+						pageSource.toLowerCase().contains(shortStreet.toLowerCase());
+				}
+
+				if (!found) {
+					allAddressesFound = false;
+				}
+
+				String statusColor = found ? "#28a745" : "#dc3545";
+				html.append("<tr style='background-color: ").append(found ? "#d4edda" : "#f8d7da").append(";'>");
+				html.append("<td style='padding: 8px;'>").append(address).append("</td>");
+				html.append("<td style='padding: 8px; color: ").append(statusColor).append("; font-weight: bold;'>")
+					.append(found ? "FOUND" : "NOT FOUND").append("</td></tr>");
+
+				logger.info("Address '{}' - {} (searched: '{}' and '{}')", address, found ? "FOUND" : "NOT FOUND", streetPart, shortStreet);
+			}
+			html.append("</table>");
+
+			// Assert all addresses found
+			assertThat(allAddressesFound)
+				.as("All recently added addresses should be displayed on Master Policy page")
+				.isTrue();
+		}
+
+		html.append("</div>");
+
+		try {
+			editEndorsementPage.logHtmlToReport(html.toString());
+		} catch (Exception e) {
+			logger.warn("Could not log validation to report: {}", e.getMessage());
+		}
+
+		logger.info("Master Policy URL and address validation completed successfully");
+	}
+
+	/**
+	 * Test 25: Download PDF from Bind History
+	 * - Click Bind History tab
+	 * - Find last entry with tag "Premium Updated"
+	 * - Click Download Document button
+	 * - Wait for PDF download
+	 */
+	@Test(priority = 25, dependsOnMethods = {"testClickBindButtonOnEditEndorsement"})
+	public void testDownloadBindHistoryPDF() {
+		logger.info("=== Test 25: Download PDF from Bind History ===");
+
+		// First, navigate to Master Policy page if not already there
+		String currentUrl = driver.getCurrentUrl();
+		if (!currentUrl.contains("/policies/")) {
+			logger.info("Not on Master Policy page, navigating...");
+			if (currentUrl.contains("policy_id=")) {
+				String[] parts = currentUrl.split("policy_id=");
+				if (parts.length > 1) {
+					String policyId = parts[1].split("&")[0];
+					String masterPolicyUrl = "https://cpiai-dev.attri.ai/policies/" + policyId;
+					driver.get(masterPolicyUrl);
+					sleep(3000);
+					waitHelper.waitAfterNavigation();
+				}
+			}
+		}
+
+		// Click Bind History tab
+		logger.info("Clicking Bind History tab...");
+		try {
+			WebElement bindHistoryTab = driver.findElement(By.id("policy-details-tab-bind-history"));
+			// Scroll into view and use JavaScript click to avoid intercepted click
+			((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", bindHistoryTab);
+			sleep(1000);
+			((JavascriptExecutor) driver).executeScript("arguments[0].click();", bindHistoryTab);
+			sleep(3000);
+			waitHelper.waitAfterNavigation();
+			logger.info("Clicked Bind History tab");
+		} catch (Exception e) {
+			logger.error("Failed to click Bind History tab: {}", e.getMessage());
+			throw new RuntimeException("Failed to click Bind History tab", e);
+		}
+
+		masterPolicyPage.captureScreenshotToReport("Bind History Tab");
+
+		// Find entry with "Premium_Updated" endorsement type and click Download Document
+		logger.info("Looking for entry with 'Premium_Updated' endorsement type...");
+		try {
+			// Wait for table to load
+			sleep(2000);
+
+			// Log page source for debugging
+			String pageSource = driver.getPageSource();
+			logger.info("Page contains 'Premium_Updated': {}", pageSource.contains("Premium_Updated"));
+			logger.info("Page contains 'Premium Updated': {}", pageSource.contains("Premium Updated"));
+			logger.info("Page contains 'Download': {}", pageSource.contains("Download"));
+
+			WebElement downloadButton = null;
+
+			// Strategy 1: Find row/entry with Premium_Updated and get Download button within it
+			String[] premiumUpdatedXpaths = {
+				"//*[contains(text(),'Premium_Updated')]/ancestor::tr//button[contains(text(),'Download')]",
+				"//*[contains(text(),'Premium_Updated')]/ancestor::div[contains(@class,'row') or contains(@class,'card') or contains(@class,'entry')]//button[contains(text(),'Download')]",
+				"//*[contains(text(),'Premium_Updated')]/following::button[contains(text(),'Download')][1]",
+				"//*[contains(text(),'Premium Updated')]/ancestor::tr//button[contains(text(),'Download')]",
+				"//*[contains(text(),'Premium Updated')]/following::button[contains(text(),'Download')][1]",
+				"//tr[contains(.,'Premium_Updated')]//button[contains(text(),'Download')]",
+				"//tr[contains(.,'Premium_Updated')]//button",
+				"//div[contains(.,'Premium_Updated')]//button[contains(text(),'Download')]"
+			};
+
+			for (String xpath : premiumUpdatedXpaths) {
+				try {
+					java.util.List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+					if (!buttons.isEmpty()) {
+						downloadButton = buttons.get(buttons.size() - 1); // Get last one (most recent)
+						logger.info("Found Download button for Premium_Updated with xpath: {}", xpath);
+						break;
+					}
+				} catch (Exception e) {
+					// Try next xpath
+				}
+			}
+
+			// Strategy 2: If not found, try to find any Download Document button
+			if (downloadButton == null) {
+				logger.info("Premium_Updated specific button not found, trying general Download button search");
+				String[] downloadButtonXpaths = {
+					"//button[contains(text(),'Download Document')]",
+					"//button[contains(text(),'Download')]",
+					"//a[contains(text(),'Download Document')]",
+					"//a[contains(text(),'Download')]",
+					"//button[contains(@class,'download')]",
+					"//*[contains(@class,'download')]//button"
+				};
+
+				for (String xpath : downloadButtonXpaths) {
+					java.util.List<WebElement> buttons = driver.findElements(By.xpath(xpath));
+					if (!buttons.isEmpty()) {
+						downloadButton = buttons.get(buttons.size() - 1);
+						logger.info("Found download button with xpath: {}", xpath);
+						break;
+					}
+				}
+			}
+
+			if (downloadButton == null) {
+				// Take screenshot for debugging
+				masterPolicyPage.captureScreenshotToReport("Download Button Not Found - Debug");
+				throw new RuntimeException("Could not find Download Document button for Premium_Updated entry");
+			}
+
+			// Click download button
+			String downloadDir = "C:\\Users\\HP\\Downloads\\";
+			java.io.File downloadFolder = new java.io.File(downloadDir);
+			java.util.Set<String> existingPdfs = new java.util.HashSet<>();
+			java.io.File[] existingFiles = downloadFolder.listFiles((dir, name) -> name.toLowerCase().endsWith(".pdf"));
+			if (existingFiles != null) {
+				for (java.io.File f : existingFiles) {
+					existingPdfs.add(f.getName());
+				}
+			}
+
+			logger.info("Clicking Download Document button...");
+			downloadButton.click();
+			sleep(5000);
+
+			// Wait for download and find new PDF
+			String bindHistoryPdfPath = null;
+			int maxWaitSeconds = 60;
+			for (int i = 0; i < maxWaitSeconds; i++) {
+				java.io.File[] currentFiles = downloadFolder.listFiles((dir, name) -> name.toLowerCase().endsWith(".pdf"));
+				if (currentFiles != null) {
+					for (java.io.File f : currentFiles) {
+						if (!existingPdfs.contains(f.getName()) && f.length() > 0) {
+							bindHistoryPdfPath = f.getAbsolutePath();
+							logger.info("Found new PDF: {}", bindHistoryPdfPath);
+							break;
+						}
+					}
+				}
+				if (bindHistoryPdfPath != null) break;
+				sleep(1000);
+			}
+
+			assertThat(bindHistoryPdfPath)
+				.as("Bind History PDF should be downloaded")
+				.isNotNull();
+
+			// Store for comparison
+			bindHistoryPdfPathStored = bindHistoryPdfPath;
+			logger.info("Bind History PDF downloaded: {}", bindHistoryPdfPath);
+
+			masterPolicyPage.captureScreenshotToReport("After Download Bind History PDF");
+
+		} catch (Exception e) {
+			logger.error("Error downloading Bind History PDF: {}", e.getMessage(), e);
+			masterPolicyPage.captureScreenshotToReport("Bind History PDF Download Error");
+			throw new RuntimeException("Failed to download Bind History PDF: " + e.getMessage(), e);
+		}
+	}
+
+	// Store Bind History PDF path
+	private String bindHistoryPdfPathStored;
+
+	/**
+	 * Test 26: Compare Endorsement PDF with Bind History PDF
+	 * - Parse both PDFs
+	 * - Compare Total Premium Due on each page
+	 * - Compare all other details
+	 */
+	@Test(priority = 26, dependsOnMethods = {"testDownloadBindHistoryPDF"})
+	public void testComparePDFs() {
+		logger.info("=== Test 26: Compare Endorsement PDF with Bind History PDF ===");
+
+		assertThat(endorsementPdfPath)
+			.as("Endorsement PDF path should be stored")
+			.isNotNull();
+
+		assertThat(bindHistoryPdfPathStored)
+			.as("Bind History PDF path should be stored")
+			.isNotNull();
+
+		logger.info("Comparing PDFs:");
+		logger.info("  Endorsement PDF: {}", endorsementPdfPath);
+		logger.info("  Bind History PDF: {}", bindHistoryPdfPathStored);
+
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;'>");
+		html.append("<h3 style='color: #28a745; margin-bottom: 15px;'>PDF Comparison: Endorsement vs Bind History</h3>");
+		html.append("<p style='color: #28a745;'><strong>Endorsement PDF:</strong> ").append(endorsementPdfPath).append("</p>");
+		html.append("<p style='color: #28a745;'><strong>Bind History PDF:</strong> ").append(bindHistoryPdfPathStored).append("</p>");
+
+		boolean allMatch = true;
+
+		try {
+			com.automation.utils.EndorsementPDFReader endorsementPdf = new com.automation.utils.EndorsementPDFReader(endorsementPdfPath);
+			com.automation.utils.EndorsementPDFReader bindHistoryPdf = new com.automation.utils.EndorsementPDFReader(bindHistoryPdfPathStored);
+
+			endorsementPdf.parseAllPages();
+			bindHistoryPdf.parseAllPages();
+
+			// Compare page counts
+			int endorsementPages = endorsementPdf.getPageCount();
+			int bindHistoryPages = bindHistoryPdf.getPageCount();
+
+			html.append("<h4 style='color: #28a745; margin-top: 15px;'>Page Count Comparison</h4>");
+			boolean pageCountMatch = endorsementPages == bindHistoryPages;
+			String pageCountColor = pageCountMatch ? "#28a745" : "#dc3545";
+			html.append("<p style='color: ").append(pageCountColor).append(";'>Endorsement Pages: ")
+				.append(endorsementPages).append(" | Bind History Pages: ").append(bindHistoryPages)
+				.append(" - ").append(pageCountMatch ? "MATCH" : "MISMATCH").append("</p>");
+
+			if (!pageCountMatch) allMatch = false;
+
+			// Compare Summary (Page 1)
+			com.automation.utils.EndorsementPDFReader.EndorsementSummary endorsementSummary = endorsementPdf.getSummary();
+			com.automation.utils.EndorsementPDFReader.EndorsementSummary bindHistorySummary = bindHistoryPdf.getSummary();
+
+			html.append("<h4 style='color: #28a745; margin-top: 15px;'>Page 1 - Summary Comparison</h4>");
+			html.append("<table style='width: 100%; border-collapse: collapse; font-size: 12px;'>");
+			html.append("<tr style='background-color: #343a40; color: white;'>");
+			html.append("<th style='padding: 8px;'>Field</th>");
+			html.append("<th style='padding: 8px;'>Endorsement PDF</th>");
+			html.append("<th style='padding: 8px;'>Bind History PDF</th>");
+			html.append("<th style='padding: 8px;'>Status</th></tr>");
+
+			// Compare Grand Total
+			boolean grandTotalMatch = Math.abs(endorsementSummary.grandTotal - bindHistorySummary.grandTotal) < 0.01;
+			allMatch = allMatch && grandTotalMatch;
+			addComparisonRow(html, "Grand Total (Total Premium Due)",
+				String.format("$%.2f", endorsementSummary.grandTotal),
+				String.format("$%.2f", bindHistorySummary.grandTotal), grandTotalMatch);
+
+			// Compare Property Premium
+			boolean propertyMatch = Math.abs(endorsementSummary.totalPropertyPremium - bindHistorySummary.totalPropertyPremium) < 0.01;
+			allMatch = allMatch && propertyMatch;
+			addComparisonRow(html, "Total Property Premium",
+				String.format("$%.2f", endorsementSummary.totalPropertyPremium),
+				String.format("$%.2f", bindHistorySummary.totalPropertyPremium), propertyMatch);
+
+			// Compare GL Premium
+			boolean glMatch = Math.abs(endorsementSummary.totalGLPremium - bindHistorySummary.totalGLPremium) < 0.01;
+			allMatch = allMatch && glMatch;
+			addComparisonRow(html, "Total GL Premium",
+				String.format("$%.2f", endorsementSummary.totalGLPremium),
+				String.format("$%.2f", bindHistorySummary.totalGLPremium), glMatch);
+
+			// Compare TIV
+			boolean tivMatch = Math.abs(endorsementSummary.totalInsuredValue - bindHistorySummary.totalInsuredValue) < 0.01;
+			allMatch = allMatch && tivMatch;
+			addComparisonRow(html, "Total Insured Value (TIV)",
+				String.format("$%.2f", endorsementSummary.totalInsuredValue),
+				String.format("$%.2f", bindHistorySummary.totalInsuredValue), tivMatch);
+
+			html.append("</table>");
+
+			// Compare Individual Location Pages (Pages 3+)
+			java.util.List<com.automation.utils.EndorsementPDFReader.LocationDetailPage> endorsementLocations = endorsementPdf.getLocationDetailPages();
+			java.util.List<com.automation.utils.EndorsementPDFReader.LocationDetailPage> bindHistoryLocations = bindHistoryPdf.getLocationDetailPages();
+
+			html.append("<h4 style='color: #28a745; margin-top: 15px;'>Individual Location Pages Comparison</h4>");
+			html.append("<table style='width: 100%; border-collapse: collapse; font-size: 11px;'>");
+			html.append("<tr style='background-color: #343a40; color: white;'>");
+			html.append("<th style='padding: 6px;'>Page</th>");
+			html.append("<th style='padding: 6px;'>Cert ID</th>");
+			html.append("<th style='padding: 6px;'>Endorsement Total</th>");
+			html.append("<th style='padding: 6px;'>Bind History Total</th>");
+			html.append("<th style='padding: 6px;'>Status</th></tr>");
+
+			int minPages = Math.min(endorsementLocations.size(), bindHistoryLocations.size());
+			for (int i = 0; i < minPages; i++) {
+				com.automation.utils.EndorsementPDFReader.LocationDetailPage endorseLoc = endorsementLocations.get(i);
+				com.automation.utils.EndorsementPDFReader.LocationDetailPage bindLoc = bindHistoryLocations.get(i);
+
+				boolean totalMatch = Math.abs(endorseLoc.totalPremium - bindLoc.totalPremium) < 0.01;
+				allMatch = allMatch && totalMatch;
+
+				String statusColor = totalMatch ? "#28a745" : "#dc3545";
+				String rowBg = totalMatch ? "#d4edda" : "#f8d7da";
+
+				html.append("<tr style='background-color: ").append(rowBg).append(";'>");
+				html.append("<td style='padding: 6px;'>").append(endorseLoc.pageNumber).append("</td>");
+				html.append("<td style='padding: 6px;'>").append(endorseLoc.certId).append("</td>");
+				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", endorseLoc.totalPremium)).append("</td>");
+				html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", bindLoc.totalPremium)).append("</td>");
+				html.append("<td style='padding: 6px; color: ").append(statusColor).append("; font-weight: bold;'>")
+					.append(totalMatch ? "MATCH" : "MISMATCH").append("</td></tr>");
+			}
+			html.append("</table>");
+
+			// Summary
+			String summaryColor = allMatch ? "#28a745" : "#dc3545";
+			html.append("<h4 style='color: ").append(summaryColor).append("; margin-top: 15px;'>")
+				.append(allMatch ? "✅" : "❌").append(" PDF Comparison Result: ")
+				.append(allMatch ? "ALL MATCH" : "MISMATCH FOUND").append("</h4>");
+
+			endorsementPdf.close();
+			bindHistoryPdf.close();
+
+		} catch (Exception e) {
+			logger.error("Error comparing PDFs: {}", e.getMessage(), e);
+			html.append("<p style='color: #dc3545;'><strong>Error:</strong> ").append(e.getMessage()).append("</p>");
+			allMatch = false;
+		}
+
+		html.append("</div>");
+
+		try {
+			editEndorsementPage.logHtmlToReport(html.toString());
+		} catch (Exception e) {
+			logger.warn("Could not log comparison to report: {}", e.getMessage());
+		}
+
+		assertThat(allMatch)
+			.as("Endorsement PDF and Bind History PDF should match")
+			.isTrue();
+
+		logger.info("PDF comparison completed successfully");
+	}
+
+	/**
+	 * Helper method to add comparison row to HTML table
+	 */
+	private void addComparisonRow(StringBuilder html, String field, String endorsementValue, String bindHistoryValue, boolean match) {
+		String statusColor = match ? "#28a745" : "#dc3545";
+		String rowBg = match ? "#d4edda" : "#f8d7da";
+		html.append("<tr style='background-color: ").append(rowBg).append(";'>");
+		html.append("<td style='padding: 8px;'>").append(field).append("</td>");
+		html.append("<td style='padding: 8px;'>").append(endorsementValue).append("</td>");
+		html.append("<td style='padding: 8px;'>").append(bindHistoryValue).append("</td>");
+		html.append("<td style='padding: 8px; color: ").append(statusColor).append("; font-weight: bold;'>")
+			.append(match ? "MATCH" : "MISMATCH").append("</td></tr>");
 	}
 
 	/**

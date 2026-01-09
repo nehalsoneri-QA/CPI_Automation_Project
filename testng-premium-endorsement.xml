@@ -32,6 +32,14 @@
                     <include name="testChangeEditEndorsementDate"/>
                     <include name="testValidateEditEndorsementPremiums"/>
                     <include name="testValidateEditDisplayComputations"/>
+                    <include name="testValidatePDFEndorsement"/>
+
+                    <!-- Update, Bind, and PDF Comparison Tests -->
+                    <include name="testClickUpdateEndorsementButton"/>
+                    <include name="testClickBindButtonOnEditEndorsement"/>
+                    <include name="testValidateMasterPolicyURL"/>
+                    <include name="testDownloadBindHistoryPDF"/>
+                    <include name="testComparePDFs"/>
                 </methods>
             </class>
         </classes>

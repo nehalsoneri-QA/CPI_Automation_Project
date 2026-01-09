@@ -515,7 +515,8 @@ public class FlatCancelPage extends FlatCancelLocators {
 
     /**
      * Extract location details for a specific certificate from the table
-     * Table columns: Cert No., Address, Property Premium, GL Premium, Water/Sewer Premium, Taxes, Fees
+     * Table columns (actual order): Property Premium, Water/Sewer Premium, GL Premium, Premium, Taxes, Fees
+     * We capture: Property Premium, Water/Sewer Premium, GL Premium, Taxes, Fees (skip Premium column)
      * @param certificateId The certificate ID to find
      * @return LocationDetails with extracted data
      */
@@ -525,6 +526,38 @@ public class FlatCancelPage extends FlatCancelLocators {
 
         try {
             waitForLocationsDetailsTable();
+
+            // First, read table headers to understand column positions
+            List<WebElement> headers = driver.findElements(By.xpath("//table//thead//tr//th"));
+            logger.info("Found {} table headers", headers.size());
+
+            // Map column names to indices
+            int propertyPremiumIdx = -1;
+            int waterSewerPremiumIdx = -1;
+            int glPremiumIdx = -1;
+            int taxesIdx = -1;
+            int feesIdx = -1;
+
+            for (int i = 0; i < headers.size(); i++) {
+                String headerText = headers.get(i).getText().trim().toLowerCase();
+                logger.debug("Header {}: {}", i, headerText);
+
+                if (headerText.contains("property") && headerText.contains("premium")) {
+                    propertyPremiumIdx = i;
+                } else if (headerText.contains("water") || headerText.contains("sewer")) {
+                    waterSewerPremiumIdx = i;
+                } else if (headerText.contains("gl") && headerText.contains("premium")) {
+                    glPremiumIdx = i;
+                } else if (headerText.equals("taxes")) {
+                    taxesIdx = i;
+                } else if (headerText.equals("fees")) {
+                    feesIdx = i;
+                }
+            }
+
+            logger.info("Column indices - Property: {}, Water/Sewer: {}, GL: {}, Taxes: {}, Fees: {}",
+                propertyPremiumIdx, waterSewerPremiumIdx, glPremiumIdx, taxesIdx, feesIdx);
+
             List<WebElement> rows = driver.findElements(tableRowsLocator);
 
             for (WebElement row : rows) {
@@ -537,14 +570,12 @@ public class FlatCancelPage extends FlatCancelLocators {
                     List<WebElement> cells = row.findElements(By.xpath(".//td"));
                     logger.info("Found {} cells in row", cells.size());
 
-                    // Extract data from cells based on column positions
-                    // Column order may vary - we need to find the right columns
-                    // Typically: Checkbox | Cert No | Status | Address | Property Premium | GL Premium | Water/Sewer | Taxes | Fees
+                    // Log all cell values for debugging
                     for (int i = 0; i < cells.size(); i++) {
                         String cellText = cells.get(i).getText().trim();
                         logger.debug("Cell {}: {}", i, cellText);
 
-                        // Identify cell by content patterns
+                        // Identify certificate and address
                         if (cellText.contains(certificateId)) {
                             details.certNo = certificateId;
                         } else if (cellText.contains(",") && (cellText.contains("St") || cellText.contains("Ave") ||
@@ -553,25 +584,56 @@ public class FlatCancelPage extends FlatCancelLocators {
                         }
                     }
 
-                    // Extract dollar amounts - look for cells with $ symbol
-                    List<String> dollarAmounts = new ArrayList<>();
-                    for (WebElement cell : cells) {
-                        String cellText = cell.getText().trim();
-                        if (cellText.startsWith("$")) {
-                            dollarAmounts.add(cellText);
-                        }
+                    // Extract values using header indices if available
+                    if (propertyPremiumIdx >= 0 && propertyPremiumIdx < cells.size()) {
+                        details.propertyPremium = parseDollarAmount(cells.get(propertyPremiumIdx).getText());
+                        logger.info("Property Premium (col {}): ${}", propertyPremiumIdx, details.propertyPremium);
+                    }
+                    if (waterSewerPremiumIdx >= 0 && waterSewerPremiumIdx < cells.size()) {
+                        details.waterSewerPremium = parseDollarAmount(cells.get(waterSewerPremiumIdx).getText());
+                        logger.info("Water/Sewer Premium (col {}): ${}", waterSewerPremiumIdx, details.waterSewerPremium);
+                    }
+                    if (glPremiumIdx >= 0 && glPremiumIdx < cells.size()) {
+                        details.glPremium = parseDollarAmount(cells.get(glPremiumIdx).getText());
+                        logger.info("GL Premium (col {}): ${}", glPremiumIdx, details.glPremium);
+                    }
+                    if (taxesIdx >= 0 && taxesIdx < cells.size()) {
+                        details.taxes = parseDollarAmount(cells.get(taxesIdx).getText());
+                        logger.info("Taxes (col {}): ${}", taxesIdx, details.taxes);
+                    }
+                    if (feesIdx >= 0 && feesIdx < cells.size()) {
+                        details.fees = parseDollarAmount(cells.get(feesIdx).getText());
+                        logger.info("Fees (col {}): ${}", feesIdx, details.fees);
                     }
 
-                    logger.info("Found {} dollar amounts: {}", dollarAmounts.size(), dollarAmounts);
+                    // Fallback: If headers not found, use position-based extraction
+                    // Actual order: Property Premium, Water/Sewer Premium, GL Premium, Premium, Taxes, Fees
+                    if (propertyPremiumIdx < 0) {
+                        List<String> dollarAmounts = new ArrayList<>();
+                        for (WebElement cell : cells) {
+                            String cellText = cell.getText().trim();
+                            if (cellText.startsWith("$")) {
+                                dollarAmounts.add(cellText);
+                            }
+                        }
 
-                    // Assign dollar amounts based on position
-                    // Order: Property Premium, GL Premium, Water/Sewer Premium, Taxes, Fees (and possibly Total)
-                    if (dollarAmounts.size() >= 5) {
-                        details.propertyPremium = parseDollarAmount(dollarAmounts.get(0));
-                        details.glPremium = parseDollarAmount(dollarAmounts.get(1));
-                        details.waterSewerPremium = parseDollarAmount(dollarAmounts.get(2));
-                        details.taxes = parseDollarAmount(dollarAmounts.get(3));
-                        details.fees = parseDollarAmount(dollarAmounts.get(4));
+                        logger.info("Fallback: Found {} dollar amounts: {}", dollarAmounts.size(), dollarAmounts);
+
+                        // Correct order: Property, Water/Sewer, GL, Premium(skip), Taxes, Fees
+                        if (dollarAmounts.size() >= 6) {
+                            details.propertyPremium = parseDollarAmount(dollarAmounts.get(0));
+                            details.waterSewerPremium = parseDollarAmount(dollarAmounts.get(1));
+                            details.glPremium = parseDollarAmount(dollarAmounts.get(2));
+                            // Skip dollarAmounts.get(3) which is "Premium"
+                            details.taxes = parseDollarAmount(dollarAmounts.get(4));
+                            details.fees = parseDollarAmount(dollarAmounts.get(5));
+                        } else if (dollarAmounts.size() >= 5) {
+                            details.propertyPremium = parseDollarAmount(dollarAmounts.get(0));
+                            details.waterSewerPremium = parseDollarAmount(dollarAmounts.get(1));
+                            details.glPremium = parseDollarAmount(dollarAmounts.get(2));
+                            details.taxes = parseDollarAmount(dollarAmounts.get(3));
+                            details.fees = parseDollarAmount(dollarAmounts.get(4));
+                        }
                     }
 
                     details.calculateSum();

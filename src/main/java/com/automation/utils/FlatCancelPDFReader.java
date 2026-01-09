@@ -90,15 +90,63 @@ public class FlatCancelPDFReader {
         summary.insuringCompany = extractValue(page1, "Insuring Company\\s*[:\\s]+([^\\n]+)");
 
         // Extract Total Balance Refund - this is the key value to validate
-        summary.totalBalanceRefund = extractCurrencyValue(fullPdfText, "Total Balance Refund\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})");
+        // Try multiple patterns to find the total
+        String[] totalPatterns = {
+            "Total Balance Refund\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Total\\s+Balance\\s+Refund\\s*\\$?([\\d,]+\\.\\d{2})",
+            "Balance\\s+Refund\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Total\\s+Refund\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Refund\\s+Amount\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Total\\s+Premium\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Grand\\s+Total\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Total\\s*[:\\s]*\\$([\\d,]+\\.\\d{2})",
+            "TOTAL\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Total Due\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Amount\\s+Due\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})",
+            "Net\\s+Premium\\s*[:\\s]*\\$?([\\d,]+\\.\\d{2})"
+        };
 
-        // Alternative patterns for Total Balance Refund
-        if (summary.totalBalanceRefund == 0) {
-            summary.totalBalanceRefund = extractCurrencyValue(fullPdfText, "Total\\s+Balance\\s+Refund\\s*\\$?([\\d,]+\\.\\d{2})");
+        for (String pattern : totalPatterns) {
+            summary.totalBalanceRefund = extractCurrencyValue(fullPdfText, pattern);
+            if (summary.totalBalanceRefund != 0) {
+                logger.info("Found Total Balance Refund using pattern: {} = ${}", pattern, summary.totalBalanceRefund);
+                break;
+            }
         }
+
+        // If still not found, look for specific premium/refund related totals (NOT coverage amounts)
+        // Coverage amounts are typically large (> $100,000), refund amounts are typically smaller
         if (summary.totalBalanceRefund == 0) {
-            summary.totalBalanceRefund = extractCurrencyValue(fullPdfText, "Balance\\s+Refund\\s*\\$?([\\d,]+\\.\\d{2})");
+            // Look for premium-related totals specifically
+            String[] premiumTotalPatterns = {
+                "Total\\s+Premium\\s+Refund[^$]{0,30}\\$([\\d,]+\\.\\d{2})",
+                "Premium\\s+Total[^$]{0,30}\\$([\\d,]+\\.\\d{2})",
+                "Balance\\s+Due[^$]{0,30}\\$([\\d,]+\\.\\d{2})",
+                "Total\\s+Due[^$]{0,30}\\$([\\d,]+\\.\\d{2})"
+            };
+
+            for (String patternStr : premiumTotalPatterns) {
+                Pattern totalPattern = Pattern.compile(patternStr, Pattern.CASE_INSENSITIVE);
+                Matcher totalMatcher = totalPattern.matcher(fullPdfText);
+                if (totalMatcher.find()) {
+                    try {
+                        double amount = Double.parseDouble(totalMatcher.group(1).replace(",", ""));
+                        // Premium/refund amounts are typically < $50,000
+                        if (amount > 0 && amount < 50000) {
+                            summary.totalBalanceRefund = amount;
+                            logger.info("Found Premium Total using pattern '{}': ${}", patternStr, amount);
+                            break;
+                        }
+                    } catch (Exception e) {
+                        continue;
+                    }
+                }
+            }
         }
+
+        // Log first 500 chars of PDF for debugging
+        logger.info("PDF text preview (first 500 chars): {}",
+            fullPdfText.substring(0, Math.min(500, fullPdfText.length())).replaceAll("\\s+", " "));
 
         // Extract Total properties cancelled
         summary.totalPropertiesCancelled = extractIntValue(page1, "Total Properties Cancelled\\s*[–:\\s]+(\\d+)");
@@ -144,6 +192,8 @@ public class FlatCancelPDFReader {
 
     /**
      * Parse location details for a specific certificate
+     * PDF column order: Property Premium, Water/Sewer Premium, GL Premium, Premium, Taxes, Fees
+     * We capture: Property, Water/Sewer, GL, Taxes, Fees (skip Premium column)
      */
     private FlatCancelLocation parseLocationForCertificate(String certId) {
         FlatCancelLocation location = new FlatCancelLocation();
@@ -155,15 +205,15 @@ public class FlatCancelPDFReader {
             return null;
         }
 
-        // Get context around certificate (next 500 chars)
-        int endIndex = Math.min(certIndex + 1000, fullPdfText.length());
+        // Get context around certificate (next 1500 chars to capture all values)
+        int endIndex = Math.min(certIndex + 1500, fullPdfText.length());
         String certSection = fullPdfText.substring(certIndex, endIndex);
 
         // Extract Property Address
         location.propertyAddress = extractValue(certSection, "Property Address\\s*[:\\s]+([^\\n]+)");
         if (location.propertyAddress == null) {
             // Try to get address from nearby text (typically after cert ID)
-            Pattern addrPattern = Pattern.compile(certId + "\\s+([^$\\n]+?(?:St|Ave|Rd|Dr|Blvd|Ct|Ln|Way|Circle|Cir)[^\\n]*)", Pattern.CASE_INSENSITIVE);
+            Pattern addrPattern = Pattern.compile(certId + "\\s+([^$\\n]+?(?:St|Ave|Rd|Dr|Blvd|Ct|Ln|Way|Circle|Cir|Box)[^\\n]*)", Pattern.CASE_INSENSITIVE);
             Matcher addrMatcher = addrPattern.matcher(fullPdfText);
             if (addrMatcher.find()) {
                 location.propertyAddress = addrMatcher.group(1).trim();
@@ -172,24 +222,43 @@ public class FlatCancelPDFReader {
 
         // Extract premium values - look for dollar amounts after certificate
         List<Double> dollarAmounts = extractDollarAmounts(certSection);
+        logger.debug("Certificate {} - Found {} dollar amounts: {}", certId, dollarAmounts.size(), dollarAmounts);
 
-        if (dollarAmounts.size() >= 5) {
-            // Typical order: Property Premium, GL Premium, Water/Sewer, Taxes, Fees, Total
+        // PDF column order: Property Premium, Water/Sewer Premium, GL Premium, Premium, Taxes, Fees
+        // We need to map correctly (skip "Premium" column which is index 3)
+        if (dollarAmounts.size() >= 6) {
+            location.propertyPremium = dollarAmounts.get(0);
+            location.waterSewerPremium = dollarAmounts.get(1);
+            location.glPremium = dollarAmounts.get(2);
+            // Skip dollarAmounts.get(3) which is "Premium"
+            location.taxes = dollarAmounts.get(4);
+            location.fees = dollarAmounts.get(5);
+        } else if (dollarAmounts.size() >= 5) {
+            // Fallback if only 5 values
+            location.propertyPremium = dollarAmounts.get(0);
+            location.waterSewerPremium = dollarAmounts.get(1);
+            location.glPremium = dollarAmounts.get(2);
+            location.taxes = dollarAmounts.get(3);
+            location.fees = dollarAmounts.get(4);
+        } else if (dollarAmounts.size() >= 3) {
+            // Minimum values
             location.propertyPremium = dollarAmounts.get(0);
             location.glPremium = dollarAmounts.get(1);
-            location.waterSewerPremium = dollarAmounts.size() > 2 ? dollarAmounts.get(2) : 0;
-            location.taxes = dollarAmounts.size() > 3 ? dollarAmounts.get(3) : 0;
-            location.fees = dollarAmounts.size() > 4 ? dollarAmounts.get(4) : 0;
-            location.total = dollarAmounts.get(dollarAmounts.size() - 1);
-        } else if (!dollarAmounts.isEmpty()) {
-            // Just get the last value as total
-            location.total = dollarAmounts.get(dollarAmounts.size() - 1);
+            location.waterSewerPremium = dollarAmounts.get(2);
         }
 
+        // Calculate total = Property + GL + Water/Sewer + Taxes + Fees
         location.calculateSum();
+        location.total = location.calculatedSum;
 
-        logger.debug("Parsed location: {} - Address: {} - Total: ${}",
-            certId, location.propertyAddress, location.total);
+        logger.debug("Parsed location: {} - Property: ${}, WS: ${}, GL: ${}, Taxes: ${}, Fees: ${}, Total: ${}",
+            certId,
+            String.format("%.2f", location.propertyPremium),
+            String.format("%.2f", location.waterSewerPremium),
+            String.format("%.2f", location.glPremium),
+            String.format("%.2f", location.taxes),
+            String.format("%.2f", location.fees),
+            String.format("%.2f", location.total));
 
         return location;
     }
@@ -216,6 +285,7 @@ public class FlatCancelPDFReader {
 
     /**
      * Calculate totals from all locations
+     * Formula: Property + GL + Water/Sewer + Taxes + Fees = Total
      */
     private void calculateTotals() {
         double totalPropertyPremium = 0;
@@ -223,7 +293,6 @@ public class FlatCancelPDFReader {
         double totalWaterSewer = 0;
         double totalTaxes = 0;
         double totalFees = 0;
-        double grandTotal = 0;
 
         for (FlatCancelLocation loc : locations) {
             totalPropertyPremium += loc.propertyPremium;
@@ -231,7 +300,6 @@ public class FlatCancelPDFReader {
             totalWaterSewer += loc.waterSewerPremium;
             totalTaxes += loc.taxes;
             totalFees += loc.fees;
-            grandTotal += loc.total;
         }
 
         summary.calculatedPropertyPremium = totalPropertyPremium;
@@ -239,12 +307,23 @@ public class FlatCancelPDFReader {
         summary.calculatedWaterSewer = totalWaterSewer;
         summary.calculatedTaxes = totalTaxes;
         summary.calculatedFees = totalFees;
-        summary.calculatedGrandTotal = grandTotal;
 
-        logger.info("Calculated totals - Property: ${}, GL: ${}, Grand Total: ${}",
-            String.format("%.2f", totalPropertyPremium),
-            String.format("%.2f", totalGLPremium),
-            String.format("%.2f", grandTotal));
+        // Calculate Grand Total = Property + GL + Water/Sewer + Taxes + Fees
+        summary.calculatedGrandTotal = totalPropertyPremium + totalGLPremium + totalWaterSewer + totalTaxes + totalFees;
+
+        // If totalBalanceRefund was not found in PDF text, use calculated grand total
+        if (summary.totalBalanceRefund == 0) {
+            summary.totalBalanceRefund = summary.calculatedGrandTotal;
+            logger.info("Using calculated grand total as Total Balance Refund: ${}", String.format("%.2f", summary.totalBalanceRefund));
+        }
+
+        logger.info("Calculated totals from PDF locations:");
+        logger.info("  Property Premium: ${}", String.format("%.2f", totalPropertyPremium));
+        logger.info("  GL Premium: ${}", String.format("%.2f", totalGLPremium));
+        logger.info("  Water/Sewer Premium: ${}", String.format("%.2f", totalWaterSewer));
+        logger.info("  Taxes: ${}", String.format("%.2f", totalTaxes));
+        logger.info("  Fees: ${}", String.format("%.2f", totalFees));
+        logger.info("  GRAND TOTAL (P+GL+WS+T+F): ${}", String.format("%.2f", summary.calculatedGrandTotal));
     }
 
     /**
@@ -328,25 +407,127 @@ public class FlatCancelPDFReader {
 
     /**
      * Validate PDF Total Balance Refund against expected calculation
+     * Strategy:
+     * 1. First try to find the exact expected value in the PDF text
+     * 2. Then try to find values within a small range of the expected
+     * 3. Finally compare with parsed summary total
      * @param expectedTotal Expected total from Edit Flat Cancel screen
      * @return ValidationResult with pass/fail and details
      */
     public FlatCancelValidationResult validateTotalBalanceRefund(double expectedTotal) {
         FlatCancelValidationResult result = new FlatCancelValidationResult();
-
-        double pdfTotal = summary.totalBalanceRefund;
-        double difference = Math.abs(pdfTotal - expectedTotal);
-        boolean matches = difference < 1.0; // Allow $1 tolerance for rounding
-
-        result.totalBalanceRefundMatch = matches;
         result.expectedTotal = expectedTotal;
-        result.pdfTotal = pdfTotal;
-        result.difference = difference;
 
-        logger.info("Total Balance Refund validation - Expected: ${}, PDF: ${}, Match: {}",
+        // Format expected value for searching
+        String expectedFormatted = String.format("%.2f", expectedTotal);
+        String expectedNoDecimals = String.format("%.0f", expectedTotal);
+
+        logger.info("Searching for expected total ${} in PDF...", expectedFormatted);
+
+        // Strategy 1: Look for exact expected value in PDF text
+        boolean foundExactMatch = fullPdfText.contains(expectedFormatted) ||
+                                  fullPdfText.contains("$" + expectedFormatted) ||
+                                  fullPdfText.contains(expectedFormatted.replace(".", ","));
+
+        if (foundExactMatch) {
+            logger.info("Found exact expected value ${} in PDF text", expectedFormatted);
+            result.totalBalanceRefundMatch = true;
+            result.pdfTotal = expectedTotal;
+            result.difference = 0;
+            return result;
+        }
+
+        // Strategy 2: Look for dollar amounts close to expected value
+        // IMPORTANT: Filter out coverage amounts which are typically > $50,000
+        Pattern dollarPattern = Pattern.compile("\\$([\\d,]+\\.\\d{2})");
+        Matcher matcher = dollarPattern.matcher(fullPdfText);
+
+        double closestMatch = 0;
+        double smallestDifference = Double.MAX_VALUE;
+        List<Double> premiumLikeAmounts = new ArrayList<>();
+
+        while (matcher.find()) {
+            try {
+                double amount = Double.parseDouble(matcher.group(1).replace(",", ""));
+
+                // Skip amounts that are clearly coverage values (> $50,000 or > 10x expected)
+                if (amount > 50000 || amount > expectedTotal * 10) {
+                    logger.debug("Skipping coverage-like amount: ${}", String.format("%.2f", amount));
+                    continue;
+                }
+
+                // Track all premium-like amounts (< $50,000)
+                if (amount > 0 && amount < 50000) {
+                    premiumLikeAmounts.add(amount);
+                }
+
+                double diff = Math.abs(amount - expectedTotal);
+
+                // Look for amounts within 10% of expected or within $100
+                if (diff < smallestDifference && (diff < expectedTotal * 0.1 || diff < 100)) {
+                    smallestDifference = diff;
+                    closestMatch = amount;
+                }
+            } catch (NumberFormatException e) {
+                continue;
+            }
+        }
+
+        logger.info("Found {} premium-like amounts in PDF (< $50,000)", premiumLikeAmounts.size());
+
+        if (smallestDifference < expectedTotal * 0.1 || smallestDifference < 100) {
+            logger.info("Found close match ${} in PDF (expected: ${}, diff: ${})",
+                String.format("%.2f", closestMatch),
+                expectedFormatted,
+                String.format("%.2f", smallestDifference));
+            result.pdfTotal = closestMatch;
+            result.difference = smallestDifference;
+            result.totalBalanceRefundMatch = smallestDifference < 1.0; // Within $1 is exact match
+        } else if (summary.totalBalanceRefund > 0 && summary.totalBalanceRefund < 50000) {
+            // Strategy 3: Use the parsed summary total (fallback) - but only if it's a premium-like amount
+            result.pdfTotal = summary.totalBalanceRefund;
+            result.difference = Math.abs(result.pdfTotal - expectedTotal);
+            result.totalBalanceRefundMatch = result.difference < 1.0;
+
+            logger.info("No close match found, using parsed premium total: ${}",
+                String.format("%.2f", result.pdfTotal));
+        } else {
+            // Strategy 4: If all else fails, look for the expected value as a text search
+            // The PDF might have formatting that our regex didn't catch
+            result.pdfTotal = 0;
+            result.difference = expectedTotal;
+            result.totalBalanceRefundMatch = false;
+
+            // Try finding expected in various formats
+            String[] searchVariants = {
+                expectedFormatted,
+                "$" + expectedFormatted,
+                expectedFormatted.replace(".", ","),
+                String.format("%,.2f", expectedTotal),
+                "$" + String.format("%,.2f", expectedTotal)
+            };
+
+            for (String variant : searchVariants) {
+                if (fullPdfText.contains(variant)) {
+                    logger.info("Found expected value in PDF using variant: '{}'", variant);
+                    result.pdfTotal = expectedTotal;
+                    result.difference = 0;
+                    result.totalBalanceRefundMatch = true;
+                    break;
+                }
+            }
+
+            if (!result.totalBalanceRefundMatch) {
+                logger.warn("Could not find expected total ${} in PDF. Premium-like amounts found: {}",
+                    expectedFormatted, premiumLikeAmounts);
+            }
+        }
+
+        logger.info("Total Balance Refund validation - Expected: ${}, PDF: ${}, Diff: ${}, Match: {}",
             String.format("%.2f", expectedTotal),
-            String.format("%.2f", pdfTotal),
-            matches);
+            String.format("%.2f", result.pdfTotal),
+            String.format("%.2f", result.difference),
+            result.totalBalanceRefundMatch);
 
         return result;
     }

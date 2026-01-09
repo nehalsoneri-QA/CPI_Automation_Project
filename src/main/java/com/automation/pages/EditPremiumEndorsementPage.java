@@ -1709,6 +1709,113 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	}
 
 	/**
+	 * Click Update Endorsement button
+	 * @return true if button was clicked successfully
+	 */
+	public boolean clickUpdateEndorsement() {
+		logger.info("Clicking Update Endorsement button");
+		try {
+			sleep(1000);
+
+			WebElement updateBtn = null;
+			WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+
+			String[] buttonXpaths = {
+				"//button[contains(text(),'Update Endorsement')]",
+				"//button[contains(.,'Update Endorsement')]",
+				"//*[contains(text(),'Update Endorsement')]/ancestor::button",
+				"//*[@id='update-endorsement-button']",
+				"//button[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'update')]"
+			};
+
+			for (String xpath : buttonXpaths) {
+				try {
+					updateBtn = wait.until(ExpectedConditions.elementToBeClickable(By.xpath(xpath)));
+					if (updateBtn != null && updateBtn.isDisplayed()) {
+						logger.info("Found Update Endorsement button with xpath: {}", xpath);
+						break;
+					}
+				} catch (Exception e) {
+					// Try next xpath
+				}
+			}
+
+			if (updateBtn == null) {
+				logger.error("Update Endorsement button not found");
+				return false;
+			}
+
+			scrollIntoView(updateBtn);
+			sleep(500);
+
+			// Click using JavaScript
+			((JavascriptExecutor) driver).executeScript("arguments[0].click();", updateBtn);
+			logger.info("Clicked Update Endorsement button");
+
+			sleep(2000);
+
+			return true;
+		} catch (Exception e) {
+			logger.error("Failed to click Update Endorsement button: {}", e.getMessage());
+			return false;
+		}
+	}
+
+	/**
+	 * Click Bind button
+	 * @return true if button was clicked successfully
+	 */
+	public boolean clickBindButton() {
+		logger.info("Clicking Bind button");
+		try {
+			sleep(1000);
+
+			WebElement bindBtn = null;
+			WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+
+			String[] buttonXpaths = {
+				"//button[text()='Bind']",
+				"//button[contains(text(),'Bind')]",
+				"//button[contains(.,'Bind')]",
+				"//*[contains(text(),'Bind')]/ancestor::button",
+				"//*[@id='bind-button']",
+				"//button[contains(@class,'bind')]"
+			};
+
+			for (String xpath : buttonXpaths) {
+				try {
+					bindBtn = wait.until(ExpectedConditions.elementToBeClickable(By.xpath(xpath)));
+					if (bindBtn != null && bindBtn.isDisplayed()) {
+						logger.info("Found Bind button with xpath: {}", xpath);
+						break;
+					}
+				} catch (Exception e) {
+					// Try next xpath
+				}
+			}
+
+			if (bindBtn == null) {
+				logger.error("Bind button not found");
+				return false;
+			}
+
+			scrollIntoView(bindBtn);
+			sleep(500);
+
+			// Click using JavaScript
+			((JavascriptExecutor) driver).executeScript("arguments[0].click();", bindBtn);
+			logger.info("Clicked Bind button");
+
+			sleep(2000);
+
+			return true;
+		} catch (Exception e) {
+			logger.error("Failed to click Bind button: {}", e.getMessage());
+			return false;
+		}
+	}
+
+	/**
 	 * Capture all endorsement form values
 	 */
 	public Map<String, String> captureEndorsementFormValues() {
@@ -8027,5 +8134,6 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 			return "";
 		}
 	}
+
 }
 

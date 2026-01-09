@@ -2816,13 +2816,16 @@ public class MasterPolicyPage extends CreateQuotePage {
 			result.pdfSummary = pdfReader.getSummary();
 			result.pdfLocations = pdfReader.getLocations();
 
-			// Step 6: Validate Total Balance Refund
-			double pdfTotalBalanceRefund = result.pdfSummary.totalBalanceRefund;
-			result.pdfGrandTotal = pdfTotalBalanceRefund;
-			result.difference = Math.abs(pdfTotalBalanceRefund - calculatedGrandTotal);
-			result.grandTotalMatch = result.difference < 1.0; // $1 tolerance
+			// Step 6: Validate Total Balance Refund using smart validation method
+			// This filters out coverage amounts and looks for actual premium values
+			com.automation.utils.FlatCancelPDFReader.FlatCancelValidationResult validationResult =
+				pdfReader.validateTotalBalanceRefund(calculatedGrandTotal);
 
-			logger.info("PDF Total Balance Refund: ${}", String.format("%.2f", pdfTotalBalanceRefund));
+			result.pdfGrandTotal = validationResult.pdfTotal;
+			result.difference = validationResult.difference;
+			result.grandTotalMatch = validationResult.totalBalanceRefundMatch;
+
+			logger.info("PDF Total Balance Refund (validated): ${}", String.format("%.2f", validationResult.pdfTotal));
 			logger.info("Calculated Grand Total: ${}", String.format("%.2f", calculatedGrandTotal));
 			logger.info("Difference: ${}", String.format("%.2f", result.difference));
 			logger.info("Match: {}", result.grandTotalMatch);

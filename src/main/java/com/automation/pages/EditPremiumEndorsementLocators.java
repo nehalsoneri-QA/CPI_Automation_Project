@@ -132,6 +132,20 @@ public class EditPremiumEndorsementLocators extends CreateQuotePage {
 	@FindBy(id = "edit-endorsement-submit-button")
 	protected WebElement submitEndorsementButton;
 
+	// Update Endorsement button - used to update the endorsement before binding
+	@FindBy(xpath = "//button[contains(text(),'Update Endorsement')]")
+	protected WebElement updateEndorsementButton;
+
+	// Bind button - used to bind the endorsement
+	@FindBy(xpath = "//button[contains(text(),'Bind')]")
+	protected WebElement bindButton;
+
+	@FindBy(id = "edit-endorsement-update-button")
+	protected WebElement updateEndorsementButtonById;
+
+	@FindBy(id = "edit-endorsement-bind-button")
+	protected WebElement bindButtonById;
+
 	// ==================== Location Section Locators ====================
 
 	@FindBy(xpath = "//button[contains(text(),'New Location')]")
