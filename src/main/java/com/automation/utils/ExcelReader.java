@@ -811,9 +811,9 @@ public class ExcelReader {
         mapColumn(row, normalized, "Address", "address", "Insured Property Address", "Property Address", "Address");
         mapColumn(row, normalized, "County", "county", "Insured Property County", "County");
         mapColumn(row, normalized, "CoverageA", "coverage_a", "Dewelling Coverage", "Dwelling Coverage", "Dwelling", "Coverage A", "CoverageA");
-        mapColumn(row, normalized, "CoverageB", "coverage_b", "Coverage B amount", "Coverage B", "CoverageB");
-        mapColumn(row, normalized, "CoverageC", "coverage_c", "Coverage C Amount", "Coverage C", "CoverageC");
-        mapColumn(row, normalized, "LossOfRents", "loss_of_rent", "Loss of Rent Percent", "Loss of Rents", "LossOfRents", "Loss Of Rent");
+        mapColumn(row, normalized, "CoverageB", "coverage_b", "Coverage B amount", "Coverage B", "CoverageB", "AdditionalStructures", "Additional Structures");
+        mapColumn(row, normalized, "CoverageC", "coverage_c", "Coverage C Amount", "Coverage C", "CoverageC", "BPP", "Business Personal Property");
+        mapColumn(row, normalized, "LossOfRents", "loss_of_rent", "Loss of Rent Percent", "Loss of Rents", "LossOfRents", "Loss Of Rent", "CoverageD", "Coverage D");
         mapColumn(row, normalized, "SuggestedRate", "recommended_rate", "Recommended Rate", "Suggested Rate", "Rate", "SuggestedRate");
         mapColumn(row, normalized, "Units", "units", "# of Units", "Units", "Number of Units");
         mapColumn(row, normalized, "PropertyType", "family_dwelling", "Family Dwelling", "Property Type", "PropertyType");
@@ -839,6 +839,19 @@ public class ExcelReader {
         mapColumn(row, normalized, "MortgageeZip", "mortgagee1_postal_code", "First Lien Mortgagee Zip Code", "MortgageeZip");
         mapColumn(row, normalized, "AutoCalculateCoverageA", "auto_calculate_coverage_a", "Do you want to calculate coverage A automatically", "AutoCalculateCoverageA");
         mapColumn(row, normalized, "SquareFtPrice", "square_ft_price", "SquareFtPrice");
+
+        // Also add "Dwelling" as an alias for CoverageA for backward compatibility
+        if (normalized.containsKey("CoverageA") && !normalized.containsKey("Dwelling")) {
+            normalized.put("Dwelling", normalized.get("CoverageA"));
+        }
+        // Also add "AdditionalStructures" as alias for CoverageB
+        if (normalized.containsKey("CoverageB") && !normalized.containsKey("AdditionalStructures")) {
+            normalized.put("AdditionalStructures", normalized.get("CoverageB"));
+        }
+        // Also add "BPP" as alias for CoverageC
+        if (normalized.containsKey("CoverageC") && !normalized.containsKey("BPP")) {
+            normalized.put("BPP", normalized.get("CoverageC"));
+        }
 
         return normalized;
     }

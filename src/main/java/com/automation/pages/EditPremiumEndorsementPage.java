@@ -203,10 +203,68 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 
 	/**
 	 * Get effective date value (handles disabled fields)
+	 * Uses same robust approach as getExpirationDate()
 	 */
 	public String getEffectiveDate() {
 		try {
-			return getDateFromDisabledField(effectiveDatePicker, "edit-endorsement-effective-date-picker");
+			logger.info("=== Getting Effective Date ===");
+
+			// Primary approach: Get date from react-date-picker hidden input (first input has full ISO date)
+			try {
+				WebElement dateContainer = driver.findElement(By.xpath("//*[@id='edit-endorsement-effective-date-picker']/div/div"));
+				if (dateContainer != null) {
+					List<WebElement> inputs = dateContainer.findElements(By.xpath(".//input"));
+					if (inputs.size() > 0) {
+						// The first input in react-date-picker contains the full ISO date (YYYY-MM-DD)
+						String firstInputValue = inputs.get(0).getAttribute("value");
+						logger.info("Effective date - First input value: '{}'", firstInputValue);
+
+						// Check if it's an ISO date format (YYYY-MM-DD)
+						if (firstInputValue != null && firstInputValue.matches("\\d{4}-\\d{2}-\\d{2}")) {
+							logger.info("Got effective date in ISO format: {}", firstInputValue);
+							return firstInputValue;
+						}
+					}
+				}
+			} catch (Exception e) {
+				logger.debug("Primary approach failed for effective date: {}", e.getMessage());
+			}
+
+			// Alternative: Try JavaScript to get the hidden input value directly
+			try {
+				String jsDate = (String) ((JavascriptExecutor) driver).executeScript(
+					"var picker = document.getElementById('edit-endorsement-effective-date-picker');" +
+					"if (picker) {" +
+					"  var inputs = picker.querySelectorAll('input');" +
+					"  for (var i = 0; i < inputs.length; i++) {" +
+					"    var val = inputs[i].value;" +
+					"    if (val && /^\\d{4}-\\d{2}-\\d{2}$/.test(val)) {" +
+					"      return val;" +
+					"    }" +
+					"  }" +
+					"}" +
+					"return '';"
+				);
+				if (jsDate != null && !jsDate.isEmpty()) {
+					logger.info("Got effective date via JavaScript: {}", jsDate);
+					return jsDate;
+				}
+			} catch (Exception e) {
+				logger.debug("JavaScript approach failed for effective date: {}", e.getMessage());
+			}
+
+			// Fallback: Try standard locator approach
+			try {
+				String value = getDateFromDisabledField(effectiveDatePicker, "edit-endorsement-effective-date-picker");
+				if (value != null && !value.isEmpty() && !value.equals("N/A")) {
+					return value;
+				}
+			} catch (Exception e) {
+				logger.debug("Standard locator approach failed for effective date: {}", e.getMessage());
+			}
+
+			logger.warn("Could not get effective date after all approaches");
+			return "";
 		} catch (Exception e) {
 			logger.warn("Error getting effective date: {}", e.getMessage());
 			return "";
@@ -215,10 +273,98 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 
 	/**
 	 * Get expiration date value (handles disabled fields)
+	 * Uses same robust approach as getEndorsementEffectiveDate()
 	 */
 	public String getExpirationDate() {
 		try {
-			return getDateFromDisabledField(expirationDatePicker, "edit-endorsement-expiration-date-picker");
+			logger.info("=== Getting Expiration Date ===");
+
+			// Primary approach: Get date from react-date-picker hidden input (first input has full ISO date)
+			try {
+				WebElement dateContainer = driver.findElement(By.xpath("//*[@id='edit-endorsement-expiration-date-picker']/div/div"));
+				if (dateContainer != null) {
+					List<WebElement> inputs = dateContainer.findElements(By.xpath(".//input"));
+					if (inputs.size() > 0) {
+						// The first input in react-date-picker contains the full ISO date (YYYY-MM-DD)
+						String firstInputValue = inputs.get(0).getAttribute("value");
+						logger.info("Expiration date - First input value: '{}'", firstInputValue);
+
+						// Check if it's an ISO date format (YYYY-MM-DD)
+						if (firstInputValue != null && firstInputValue.matches("\\d{4}-\\d{2}-\\d{2}")) {
+							logger.info("Got expiration date in ISO format: {}", firstInputValue);
+							return firstInputValue;
+						}
+					}
+				}
+			} catch (Exception e) {
+				logger.debug("Primary approach failed for expiration date: {}", e.getMessage());
+			}
+
+			// Alternative: Try JavaScript to get the hidden input value directly
+			try {
+				String jsDate = (String) ((JavascriptExecutor) driver).executeScript(
+					"var picker = document.getElementById('edit-endorsement-expiration-date-picker');" +
+					"if (picker) {" +
+					"  var inputs = picker.querySelectorAll('input');" +
+					"  for (var i = 0; i < inputs.length; i++) {" +
+					"    var val = inputs[i].value;" +
+					"    if (val && /^\\d{4}-\\d{2}-\\d{2}$/.test(val)) {" +
+					"      return val;" +
+					"    }" +
+					"  }" +
+					"}" +
+					"return '';"
+				);
+
+				if (jsDate != null && !jsDate.isEmpty()) {
+					logger.info("Got expiration date via JavaScript: {}", jsDate);
+					return jsDate;
+				}
+			} catch (Exception e) {
+				logger.debug("JavaScript approach failed for expiration date: {}", e.getMessage());
+			}
+
+			// Fallback: Try standard locator approach
+			try {
+				String value = getDateFromDisabledField(expirationDatePicker, "edit-endorsement-expiration-date-picker");
+				if (value != null && !value.isEmpty() && !value.equals("N/A")) {
+					return value;
+				}
+			} catch (Exception e) {
+				logger.debug("Standard locator approach failed for expiration date: {}", e.getMessage());
+			}
+
+			// Fallback: Try finding by label text "Expiration Date" and get sibling/next element value
+			try {
+				String labelXpath = "//label[contains(text(),'Expiration Date') or contains(text(),'Expiration')]/following-sibling::*//input";
+				List<WebElement> inputs = driver.findElements(By.xpath(labelXpath));
+				for (WebElement input : inputs) {
+					String inputValue = input.getAttribute("value");
+					if (inputValue != null && inputValue.matches("\\d{4}-\\d{2}-\\d{2}")) {
+						logger.info("Got expiration date from label sibling: {}", inputValue);
+						return inputValue;
+					}
+				}
+			} catch (Exception e) {
+				logger.debug("Label sibling approach failed for expiration date: {}", e.getMessage());
+			}
+
+			// Last fallback: Try to find any date picker with "expiration" in its ID
+			try {
+				List<WebElement> datePickers = driver.findElements(By.xpath("//*[contains(@id,'expiration')]//input"));
+				for (WebElement picker : datePickers) {
+					String value = picker.getAttribute("value");
+					if (value != null && value.matches("\\d{4}-\\d{2}-\\d{2}")) {
+						logger.info("Got expiration date from fallback picker: {}", value);
+						return value;
+					}
+				}
+			} catch (Exception e) {
+				logger.debug("Fallback picker approach failed: {}", e.getMessage());
+			}
+
+			logger.warn("Could not get expiration date after all approaches");
+			return "";
 		} catch (Exception e) {
 			logger.warn("Error getting expiration date: {}", e.getMessage());
 			return "";
@@ -2131,16 +2277,19 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	 * Validate Display Computations against Excel sheet data with pro-rata logic
 	 * @param createEndorsementLocations locations from CreateEndorsement sheet
 	 * @param editEndorsementLocations locations from EditEndorsement sheet
+	 * @param carrierName Carrier name for Arch+California skip logic (can be null to auto-detect)
 	 * @return DisplayComputationSheetValidationResult with all validation details
 	 */
 	public DisplayComputationSheetValidationResult validateDisplayComputationsAgainstSheetData(
 			List<Map<String, String>> createEndorsementLocations,
-			List<Map<String, String>> editEndorsementLocations) {
+			List<Map<String, String>> editEndorsementLocations,
+			String carrierName) {
 
 		logger.info("=== Validating Display Computations Against Sheet Data ===");
-		logger.info("Create Endorsement locations: {}, Edit Endorsement locations: {}",
+		logger.info("Create Endorsement locations: {}, Edit Endorsement locations: {}, Carrier: {}",
 			createEndorsementLocations != null ? createEndorsementLocations.size() : 0,
-			editEndorsementLocations != null ? editEndorsementLocations.size() : 0);
+			editEndorsementLocations != null ? editEndorsementLocations.size() : 0,
+			carrierName);
 
 		DisplayComputationSheetValidationResult result = new DisplayComputationSheetValidationResult();
 
@@ -2194,19 +2343,49 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 				DisplayComputationLocationValidation locValidation = new DisplayComputationLocationValidation();
 				locValidation.setAddress(sheetAddress);
 
-				if (dialogLoc == null) {
-					locValidation.setError("Location not found in Display Computation dialog");
-					locValidation.setAllMatched(false);
-					result.addLocationValidation(locValidation);
-					continue;
-				}
-
-				// Get expected values from sheet with comprehensive key lookups
+				// Always get expected values from sheet with comprehensive key lookups
 				double expectedDwelling = getValueWithKeyVariations(sheetLocation, "Dwelling", "CoverageA", "dwelling", "coverage_a");
 				double expectedAS = getValueWithKeyVariations(sheetLocation, "AdditionalStructures", "CoverageB", "additional_structures", "coverage_b", "AS");
 				double expectedBPP = getValueWithKeyVariations(sheetLocation, "BPP", "CoverageC", "bpp", "coverage_c", "BusinessPersonalProperty");
 				double expectedLossOfRents = getValueWithKeyVariations(sheetLocation, "LossOfRents", "CoverageD", "loss_of_rents", "coverage_d", "LOR");
 				double expectedRate = getValueWithKeyVariations(sheetLocation, "Rate", "SuggestedRate", "recommended_rate", "rate", "suggestedrate", "RecommendedRate");
+
+				logger.info("Expected values for '{}': Dwelling={}, AS={}, BPP={}, LoR={}, Rate={}",
+					sheetAddress, expectedDwelling, expectedAS, expectedBPP, expectedLossOfRents, expectedRate);
+
+				if (dialogLoc == null) {
+					logger.warn("Location '{}' not found in Display Computation dialog. Captured {} locations from dialog.",
+						sheetAddress, dialogData.size());
+					// Log captured addresses for debugging
+					for (int d = 0; d < dialogData.size(); d++) {
+						logger.debug("Dialog location {}: '{}'", d + 1, dialogData.get(d).getAddress());
+					}
+
+					// Check if this is an Arch + California case (expected to be skipped)
+					boolean isCaliforniaLocation = isCaliforniaAddress(sheetAddress);
+					String detectedCarrier = (carrierName != null && !carrierName.isEmpty()) ? carrierName : getSelectedCarrier();
+					boolean isArchCarrier = detectedCarrier != null && detectedCarrier.toLowerCase().contains("arch");
+					logger.info("Arch + CA Check - Address: '{}', isCA: {}, Carrier: '{}', isArch: {}",
+						sheetAddress, isCaliforniaLocation, detectedCarrier, isArchCarrier);
+
+					locValidation.setExpectedDwelling(expectedDwelling);
+					locValidation.setExpectedAdditionalStructures(expectedAS);
+					locValidation.setExpectedBPP(expectedBPP);
+					locValidation.setExpectedLossOfRents(expectedLossOfRents);
+					locValidation.setExpectedRate(expectedRate);
+
+					if (isArchCarrier && isCaliforniaLocation) {
+						// Location was rejected due to Arch not covering California - this is expected behavior
+						logger.info("Location '{}' not found - Expected: Arch Specialty Insurance does not cover California counties", sheetAddress);
+						locValidation.setError("SKIPPED - Arch does not cover California counties (Expected)");
+						locValidation.setAllMatched(true); // Mark as passed since this is expected behavior
+					} else {
+						locValidation.setError("Location not found in Display Computation dialog");
+						locValidation.setAllMatched(false);
+					}
+					result.addLocationValidation(locValidation);
+					continue;
+				}
 
 				// Get actual values from dialog
 				double actualDwelling = dialogLoc.getDwelling();
@@ -2268,8 +2447,13 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 				locValidation.setAnnualPropertyPremium(annualPropertyPremium);
 				locValidation.setCalculatedPropertyPremium(calculatedPropertyPremium);
 
-				// Get displayed property premium from table for this location
-				double displayedPropertyPremium = getPropertyPremiumFromTableByAddress(sheetAddress);
+				// Get displayed property premium from dialog data (already captured) or from main table as fallback
+				double displayedPropertyPremium = dialogLoc.getPropertyPremium();
+				if (displayedPropertyPremium == 0) {
+					// Fallback: Get from main table if dialog didn't capture it
+					displayedPropertyPremium = getPropertyPremiumFromTableByAddress(sheetAddress);
+					logger.info("Property premium from dialog was 0, got from table: {}", displayedPropertyPremium);
+				}
 				locValidation.setDisplayedPropertyPremium(displayedPropertyPremium);
 
 				boolean premiumMatch = Math.abs(calculatedPropertyPremium - displayedPropertyPremium) < 1.0;
@@ -2309,17 +2493,55 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	}
 
 	/**
-	 * Find dialog location data by address (partial match)
+	 * Find dialog location data by address (flexible matching)
 	 */
 	private LocationComputationData findDialogLocationByAddress(List<LocationComputationData> dialogData, String address) {
-		String normalizedAddress = address.toLowerCase().replaceAll("[^a-z0-9]", "");
+		if (address == null || address.isEmpty()) {
+			return null;
+		}
+
+		String normalizedSearch = address.toLowerCase().replaceAll("[^a-z0-9]", "");
+
+		// Extract just the street part (first portion before comma) for more flexible matching
+		String streetPart = address.split(",")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
+
+		logger.info("Searching for address: '{}' (normalized: '{}', street: '{}')", address, normalizedSearch, streetPart);
 
 		for (LocationComputationData loc : dialogData) {
-			String dialogAddr = loc.getAddress().toLowerCase().replaceAll("[^a-z0-9]", "");
-			if (dialogAddr.contains(normalizedAddress) || normalizedAddress.contains(dialogAddr)) {
+			String dialogAddr = loc.getAddress();
+			if (dialogAddr == null || dialogAddr.isEmpty()) {
+				continue;
+			}
+
+			String normalizedDialog = dialogAddr.toLowerCase().replaceAll("[^a-z0-9]", "");
+			String dialogStreet = dialogAddr.split(",")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
+
+			// Try multiple matching strategies
+			// 1. Full normalized address contains
+			if (normalizedDialog.contains(normalizedSearch) || normalizedSearch.contains(normalizedDialog)) {
+				logger.info("Found match (full address): '{}' matches '{}'", dialogAddr, address);
 				return loc;
 			}
+
+			// 2. Street part matches
+			if (dialogStreet.equals(streetPart) || dialogStreet.contains(streetPart) || streetPart.contains(dialogStreet)) {
+				logger.info("Found match (street part): '{}' matches '{}'", dialogAddr, address);
+				return loc;
+			}
+
+			// 3. Check if key parts match (street number + street name)
+			if (normalizedSearch.length() > 5 && normalizedDialog.length() > 5) {
+				// Extract first 10 chars as key identifier
+				String searchKey = normalizedSearch.substring(0, Math.min(15, normalizedSearch.length()));
+				String dialogKey = normalizedDialog.substring(0, Math.min(15, normalizedDialog.length()));
+				if (searchKey.equals(dialogKey)) {
+					logger.info("Found match (key prefix): '{}' matches '{}'", dialogAddr, address);
+					return loc;
+				}
+			}
 		}
+
+		logger.warn("No match found for address '{}' among {} dialog locations", address, dialogData.size());
 		return null;
 	}
 
@@ -2398,14 +2620,14 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		}
 
 		// Pro-rata info
-		html.append("<p style='color: #000; margin: 10px 0;'><strong>Pro-Rata Days:</strong> ")
+		html.append("<p style='color: #28a745; margin: 10px 0;'><strong>Pro-Rata Days:</strong> ")
 			.append(result.getProRataDays()).append(" (").append(result.getEndorsementEffectiveDate())
 			.append(" to ").append(result.getExpirationDate()).append(")</p>");
 
-		html.append("<p style='color: #000; margin: 10px 0;'><strong>Formulas:</strong> TIV = Dwelling + AS + BPP + Loss Of Rents | Property Premium = (TIV / 100 × Rate) × (ProRataDays / 365)</p>");
+		html.append("<p style='color: #28a745; margin: 10px 0;'><strong>Formulas:</strong> TIV = Dwelling + AS + BPP + Loss Of Rents | Property Premium = (TIV / 100 × Rate) × (ProRataDays / 365)</p>");
 
 		// Summary
-		html.append("<p style='color: #000;'><strong>Summary:</strong> ")
+		html.append("<p style='color: #28a745;'><strong>Summary:</strong> ")
 			.append(result.getPassedCount()).append(" Passed, ")
 			.append(result.getFailedCount()).append(" Failed out of ")
 			.append(result.getTotalCount()).append(" locations</p>");
@@ -2423,32 +2645,52 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		html.append("<th style='padding: 6px;'>Calc Premium</th>");
 		html.append("<th style='padding: 6px;'>Disp Premium</th>");
 		html.append("<th style='padding: 6px;'>Status</th>");
+		html.append("<th style='padding: 6px;'>Reason</th>");
 		html.append("</tr>");
 
 		int rowNum = 0;
 		for (DisplayComputationLocationValidation loc : result.getLocationValidations()) {
 			String bgColor = rowNum % 2 == 0 ? "#ffffff" : "#f8f9fa";
-			String status = loc.isAllMatched() ? "PASS" : "FAIL";
-			String statusColor = loc.isAllMatched() ? "#28a745" : "#dc3545";
+
+			// Determine status - check if this is a SKIPPED case (Arch + California)
+			String status;
+			String statusColor;
+			String reason = "";
+			boolean isSkipped = loc.getError() != null && loc.getError().contains("SKIPPED");
+
+			if (isSkipped) {
+				status = "SKIPPED";
+				statusColor = "#FF8C00"; // Orange for skipped
+				reason = "Arch does not cover California counties (Expected)";
+			} else if (loc.isAllMatched()) {
+				status = "PASS";
+				statusColor = "#28a745"; // Green for pass
+				reason = "All values matched";
+			} else {
+				status = "FAIL";
+				statusColor = "#dc3545"; // Red for fail
+				reason = loc.getError() != null ? loc.getError() : "Values mismatch";
+			}
 
 			html.append(String.format("<tr style='background-color: %s;'>", bgColor));
 			html.append(String.format("<td style='padding: 6px;'>%s</td>", truncateAddress(loc.getAddress())));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
-				loc.isDwellingMatch() ? "#28a745" : "#dc3545", loc.getExpectedDwelling(), loc.getActualDwelling()));
+				isSkipped ? "#FF8C00" : (loc.isDwellingMatch() ? "#28a745" : "#dc3545"), loc.getExpectedDwelling(), loc.getActualDwelling()));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
-				loc.isAdditionalStructuresMatch() ? "#28a745" : "#dc3545", loc.getExpectedAdditionalStructures(), loc.getActualAdditionalStructures()));
+				isSkipped ? "#FF8C00" : (loc.isAdditionalStructuresMatch() ? "#28a745" : "#dc3545"), loc.getExpectedAdditionalStructures(), loc.getActualAdditionalStructures()));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
-				loc.isBppMatch() ? "#28a745" : "#dc3545", loc.getExpectedBPP(), loc.getActualBPP()));
+				isSkipped ? "#FF8C00" : (loc.isBppMatch() ? "#28a745" : "#dc3545"), loc.getExpectedBPP(), loc.getActualBPP()));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
-				loc.isLossOfRentsMatch() ? "#28a745" : "#dc3545", loc.getExpectedLossOfRents(), loc.getActualLossOfRents()));
+				isSkipped ? "#FF8C00" : (loc.isLossOfRentsMatch() ? "#28a745" : "#dc3545"), loc.getExpectedLossOfRents(), loc.getActualLossOfRents()));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>%.4f / %.4f</td>",
-				loc.isRateMatch() ? "#28a745" : "#dc3545", loc.getExpectedRate(), loc.getActualRate()));
+				isSkipped ? "#FF8C00" : (loc.isRateMatch() ? "#28a745" : "#dc3545"), loc.getExpectedRate(), loc.getActualRate()));
 			html.append(String.format("<td style='padding: 6px; color: %s;'>$%.0f / $%.0f</td>",
-				loc.isTivMatch() ? "#28a745" : "#dc3545", loc.getCalculatedTIV(), loc.getActualTIV()));
+				isSkipped ? "#FF8C00" : (loc.isTivMatch() ? "#28a745" : "#dc3545"), loc.getCalculatedTIV(), loc.getActualTIV()));
 			html.append(String.format("<td style='padding: 6px;'>$%.2f%s</td>",
 				loc.getCalculatedPropertyPremium(), loc.isProRataApplied() ? " (Pro-Rata)" : ""));
 			html.append(String.format("<td style='padding: 6px;'>$%.2f</td>", loc.getDisplayedPropertyPremium()));
 			html.append(String.format("<td style='padding: 6px; font-weight: bold; color: %s;'>%s</td>", statusColor, status));
+			html.append(String.format("<td style='padding: 6px; color: %s;'>%s</td>", statusColor, reason));
 			html.append("</tr>");
 			rowNum++;
 		}
@@ -2617,16 +2859,104 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	private List<LocationComputationData> captureAllLocationsFromDialog() {
 		List<LocationComputationData> allData = new java.util.ArrayList<>();
 
+		// First, reset to page 1 to ensure we start from beginning
+		resetDialogToFirstPage();
+
+		int pageNumber = 1;
+		int maxPages = 20; // Safety limit to prevent infinite loops
+
 		do {
 			// Capture current page data
 			List<LocationComputationData> pageData = captureCurrentPageLocations();
 			allData.addAll(pageData);
-			logger.info("Captured {} locations from current page", pageData.size());
+			logger.info("Page {}: Captured {} locations (total so far: {})", pageNumber, pageData.size(), allData.size());
+
+			// Log addresses captured on this page
+			for (LocationComputationData loc : pageData) {
+				logger.info("  - Captured: '{}'", loc.getAddress());
+			}
+
+			pageNumber++;
+			if (pageNumber > maxPages) {
+				logger.warn("Reached max page limit ({}), stopping pagination", maxPages);
+				break;
+			}
 
 			// Check if Next button exists and is enabled
 		} while (clickNextPageIfEnabled());
 
+		logger.info("Total locations captured from dialog across {} pages: {}", pageNumber - 1, allData.size());
 		return allData;
+	}
+
+	/**
+	 * Reset dialog pagination to first page
+	 */
+	private void resetDialogToFirstPage() {
+		try {
+			// Try to find and click "Previous" or "First" button until disabled
+			int maxClicks = 20;
+			int clicks = 0;
+
+			while (clicks < maxClicks) {
+				WebElement prevBtn = findPreviousPageButton();
+				if (prevBtn == null) {
+					logger.info("No Previous button found - likely on first page");
+					break;
+				}
+
+				// Check if disabled
+				String disabled = prevBtn.getAttribute("disabled");
+				String ariaDisabled = prevBtn.getAttribute("aria-disabled");
+				String className = prevBtn.getAttribute("class");
+
+				boolean isDisabled = (disabled != null && (disabled.equals("true") || disabled.equals("disabled")))
+					|| (ariaDisabled != null && ariaDisabled.equals("true"))
+					|| (className != null && className.contains("disabled"))
+					|| !prevBtn.isEnabled();
+
+				if (isDisabled) {
+					logger.info("Previous button is disabled - on first page");
+					break;
+				}
+
+				// Click previous
+				((JavascriptExecutor) driver).executeScript("arguments[0].click();", prevBtn);
+				sleep(1000);
+				clicks++;
+				logger.info("Clicked Previous button ({} times)", clicks);
+			}
+		} catch (Exception e) {
+			logger.debug("Error resetting to first page: {}", e.getMessage());
+		}
+	}
+
+	/**
+	 * Find Previous page button in dialog
+	 */
+	private WebElement findPreviousPageButton() {
+		String[] prevBtnXpaths = {
+			"//*[contains(@id,'radix')]//button[contains(text(),'Previous')]",
+			"//div[@role='dialog']//button[contains(text(),'Previous')]",
+			"//div[@role='dialog']//button[contains(text(),'Prev')]",
+			"//button[contains(text(),'Previous')]",
+			"//button[contains(text(),'Prev')]",
+			"//*[@role='dialog']//button[contains(.,'Previous')]"
+		};
+
+		for (String xpath : prevBtnXpaths) {
+			try {
+				List<WebElement> btns = driver.findElements(By.xpath(xpath));
+				for (WebElement btn : btns) {
+					if (btn.isDisplayed()) {
+						return btn;
+					}
+				}
+			} catch (Exception e) {
+				// Continue
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -2687,11 +3017,22 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 			headerIndices.put("lor", 4);
 			headerIndices.put("rate", 5);
 			headerIndices.put("taxes", 6);
-			logger.info("Using fixed column indices for dialog table");
+			headerIndices.put("tiv", 7);
+			headerIndices.put("propertyPremium", 8);
+			logger.info("Using fixed column indices for dialog table (includes TIV and Property Premium)");
 
 			for (WebElement row : dialogRows) {
 				try {
 					List<WebElement> cells = row.findElements(By.xpath(".//td"));
+
+					// Log cell count for debugging
+					logger.info("Row has {} cells", cells.size());
+
+					// Log all cell values for debugging
+					for (int c = 0; c < cells.size(); c++) {
+						String cellText = cells.get(c).getText().trim();
+						logger.debug("Cell[{}] = '{}'", c, cellText);
+					}
 
 					if (cells.size() < 6) {
 						logger.warn("Row has only {} cells, skipping", cells.size());
@@ -2709,9 +3050,18 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 					data.setRate(getCellValue(cells, headerIndices.get("rate")));
 					data.setTaxes(getCellValue(cells, headerIndices.get("taxes")));
 
-					logger.info("Location: {}, Dwelling: {}, AS: {}, BPP: {}, LOR: {}, Rate: {}, Taxes: {}",
+					// Capture TIV and Property Premium if columns exist
+					if (cells.size() > headerIndices.get("tiv")) {
+						data.setTiv(getCellValue(cells, headerIndices.get("tiv")));
+					}
+					if (cells.size() > headerIndices.get("propertyPremium")) {
+						data.setPropertyPremium(getCellValue(cells, headerIndices.get("propertyPremium")));
+					}
+
+					logger.info("Location: {}, Dwelling: {}, AS: {}, BPP: {}, LOR: {}, Rate: {}, Taxes: {}, TIV: {}, PropPremium: {}",
 						data.getAddress(), data.getDwelling(), data.getAdditionalStructures(),
-						data.getBpp(), data.getLossOfRents(), data.getRate(), data.getTaxes());
+						data.getBpp(), data.getLossOfRents(), data.getRate(), data.getTaxes(),
+						data.getTiv(), data.getPropertyPremium());
 
 					locations.add(data);
 				} catch (Exception e) {
@@ -2797,13 +3147,16 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	}
 
 	/**
-	 * Click Next page button if enabled
+	 * Click Next page button if enabled in Display Computation dialog
 	 */
 	private boolean clickNextPageIfEnabled() {
 		String[] nextBtnXpaths = {
 			"//*[contains(@id,'radix')]//button[contains(text(),'Next')]",
 			"//div[@role='dialog']//button[contains(text(),'Next')]",
-			"//div[contains(@class,'Dialog')]//button[contains(text(),'Next')]"
+			"//div[contains(@class,'Dialog')]//button[contains(text(),'Next')]",
+			"//button[contains(text(),'Next')]",
+			"//button[normalize-space()='Next']",
+			"//*[@role='dialog']//button[contains(.,'Next')]"
 		};
 
 		for (String xpath : nextBtnXpaths) {
@@ -2816,11 +3169,16 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 						boolean isDisabled = disabled != null && (disabled.equals("true") || disabled.equals("disabled"));
 						String ariaDisabled = btn.getAttribute("aria-disabled");
 						boolean isAriaDisabled = ariaDisabled != null && ariaDisabled.equals("true");
+						String className = btn.getAttribute("class");
+						boolean hasDisabledClass = className != null && className.contains("disabled");
 
-						if (!isDisabled && !isAriaDisabled && btn.isEnabled()) {
+						logger.info("Found Next button: disabled={}, ariaDisabled={}, hasDisabledClass={}, isEnabled={}",
+							isDisabled, isAriaDisabled, hasDisabledClass, btn.isEnabled());
+
+						if (!isDisabled && !isAriaDisabled && !hasDisabledClass && btn.isEnabled()) {
 							((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-							sleep(1000);
-							logger.info("Clicked Next page button");
+							sleep(2000); // Wait for next page to load
+							logger.info("Clicked Next page button - waiting for data to load");
 							return true;
 						} else {
 							logger.info("Next button found but disabled - on last page");
@@ -2829,9 +3187,10 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 					}
 				}
 			} catch (Exception e) {
-				// Continue
+				logger.debug("Error finding Next button with xpath {}: {}", xpath, e.getMessage());
 			}
 		}
+		logger.info("No Next button found in dialog");
 		return false;
 	}
 
@@ -3053,7 +3412,7 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		}
 
 		html.append("</table>");
-		html.append(String.format("<p style='margin-top: 10px; color: #000;'><strong>Summary:</strong> %d Passed, %d Failed out of %d locations</p>",
+		html.append(String.format("<p style='margin-top: 10px; color: #FF1493;'><strong>Summary:</strong> %d Passed, %d Failed out of %d locations</p>",
 			result.getPassedCount(), result.getFailedCount(), result.getTotalCount()));
 		html.append("</div>");
 
@@ -3141,6 +3500,8 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		private double lossOfRents;
 		private double rate;
 		private double taxes;
+		private double tiv;
+		private double propertyPremium;
 
 		public String getAddress() { return address; }
 		public void setAddress(String v) { this.address = v; }
@@ -3156,6 +3517,10 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		public void setRate(double v) { this.rate = v; }
 		public double getTaxes() { return taxes; }
 		public void setTaxes(double v) { this.taxes = v; }
+		public double getTiv() { return tiv; }
+		public void setTiv(double v) { this.tiv = v; }
+		public double getPropertyPremium() { return propertyPremium; }
+		public void setPropertyPremium(double v) { this.propertyPremium = v; }
 	}
 
 	/**
@@ -5242,14 +5607,28 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 			String endorsementDateStr = getEndorsementEffectiveDate();
 			String expirationDateStr = getExpirationDate();
 
-			logger.info("Calculating pro-rata days: Endorsement Date={}, Expiration Date={}",
+			logger.info("Calculating pro-rata days: Endorsement Date='{}', Expiration Date='{}'",
 				endorsementDateStr, expirationDateStr);
+
+			// Check if dates were captured
+			if (endorsementDateStr == null || endorsementDateStr.isEmpty()) {
+				logger.error("Endorsement Effective Date is empty or null");
+				return -1;
+			}
+			if (expirationDateStr == null || expirationDateStr.isEmpty()) {
+				logger.error("Expiration Date is empty or null");
+				return -1;
+			}
 
 			java.time.LocalDate endorsementDate = parseDate(endorsementDateStr);
 			java.time.LocalDate expirationDate = parseDate(expirationDateStr);
 
-			if (endorsementDate == null || expirationDate == null) {
-				logger.error("Could not parse dates for pro-rata calculation");
+			if (endorsementDate == null) {
+				logger.error("Could not parse Endorsement Date: '{}'", endorsementDateStr);
+				return -1;
+			}
+			if (expirationDate == null) {
+				logger.error("Could not parse Expiration Date: '{}'", expirationDateStr);
 				return -1;
 			}
 
@@ -5299,22 +5678,45 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	 * @param locationDataList List of location data from Excel sheet
 	 * @return ProRataPremiumValidationResult with all calculations and validation results
 	 */
+	/**
+	 * Validate Pro-Rata Premium Calculations (without carrier - will try to detect)
+	 */
 	public ProRataPremiumValidationResult validateProRataPremiumCalculations(List<Map<String, String>> locationDataList) {
+		return validateProRataPremiumCalculations(locationDataList, null);
+	}
+
+	/**
+	 * Validate Pro-Rata Premium Calculations with known carrier name
+	 * @param locationDataList List of location data from Excel
+	 * @param carrierName Known carrier name (e.g., "Arch Specialty Insurance") - used for CA validation
+	 */
+	public ProRataPremiumValidationResult validateProRataPremiumCalculations(List<Map<String, String>> locationDataList, String carrierName) {
 		logger.info("=== Validating Pro-Rata Premium Calculations for {} Locations ===", locationDataList.size());
+		if (carrierName != null) {
+			logger.info("Carrier for validation: {}", carrierName);
+		}
 		ProRataPremiumValidationResult result = new ProRataPremiumValidationResult();
 
 		try {
+			// Get dates for report first (before calculating pro-rata days)
+			String endorsementDate = getEndorsementEffectiveDate();
+			String expirationDate = getExpirationDate();
+			result.setEndorsementEffectiveDate(endorsementDate);
+			result.setExpirationDate(expirationDate);
+
+			logger.info("Pro-Rata Dates - Endorsement Effective: '{}', Expiration: '{}'", endorsementDate, expirationDate);
+
 			// Step 1: Calculate number of pro-rata days
 			long proRataDays = calculateProRataDays();
 			if (proRataDays <= 0) {
-				result.setError("Could not calculate pro-rata days");
+				String errorMsg = String.format("Could not calculate pro-rata days. Endorsement Date='%s', Expiration Date='%s'",
+					endorsementDate != null ? endorsementDate : "NULL",
+					expirationDate != null ? expirationDate : "NULL");
+				logger.error(errorMsg);
+				result.setError(errorMsg);
 				return result;
 			}
 			result.setProRataDays(proRataDays);
-
-			// Get dates for report
-			result.setEndorsementEffectiveDate(getEndorsementEffectiveDate());
-			result.setExpirationDate(getExpirationDate());
 
 			// Step 2: Find location table and get displayed values
 			WebElement table = findLocationTable();
@@ -5350,14 +5752,37 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 					WebElement matchingRow = findRowByAddress(rows, addressColIndex, excelAddress);
 
 					if (matchingRow == null) {
-						logger.warn("Could not find row matching address: '{}' - adding as FAILED", excelAddress);
-						LocationProRataCalculation calc = new LocationProRataCalculation();
-						calc.setLocationNumber(i + 1);
-						calc.setAddress(excelAddress);
-						calc.setError("Row not found for address: " + excelAddress);
-						calc.setAllMatched(false);
-						calculations.add(calc);
-						allPassed = false;
+						// Check if this is expected due to Arch + California validation
+						boolean isCaliforniaLocation = isCaliforniaAddress(excelAddress);
+						// Use passed-in carrier name if available, otherwise try to detect
+						String detectedCarrier = carrierName != null ? carrierName : getSelectedCarrier();
+						boolean isArchCarrier = detectedCarrier != null && detectedCarrier.toLowerCase().contains("arch");
+
+						logger.info("Arch + CA Check - Address: '{}', isCA: {}, Carrier: '{}', isArch: {}",
+							excelAddress, isCaliforniaLocation, detectedCarrier, isArchCarrier);
+
+						if (isArchCarrier && isCaliforniaLocation) {
+							// Location was rejected due to Arch not covering California - this is expected behavior
+							logger.info("Location '{}' not found - Expected: Arch Specialty Insurance does not cover California counties", excelAddress);
+							LocationProRataCalculation calc = new LocationProRataCalculation();
+							calc.setLocationNumber(i + 1);
+							calc.setAddress(excelAddress);
+							calc.setError("SKIPPED - Arch does not cover California counties (Expected)");
+							calc.setAllMatched(true);  // Mark as PASS since this is expected behavior
+							calc.setSkippedDueToArchCA(true);
+							calculations.add(calc);
+							// Don't mark allPassed as false - this is expected behavior
+							logger.info("Arch + CA validation: Location {} marked as PASS (expected rejection)", i + 1);
+						} else {
+							logger.warn("Could not find row matching address: '{}' - adding as FAILED", excelAddress);
+							LocationProRataCalculation calc = new LocationProRataCalculation();
+							calc.setLocationNumber(i + 1);
+							calc.setAddress(excelAddress);
+							calc.setError("Row not found for address: " + excelAddress);
+							calc.setAllMatched(false);
+							calculations.add(calc);
+							allPassed = false;
+						}
 						// Continue to next location - don't skip
 					} else {
 						logger.info("Found matching row for address: '{}'", excelAddress);
@@ -5823,6 +6248,13 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		String normalizedTarget = normalizeAddress(targetAddress);
 		logger.info("Searching for normalized address: '{}'", normalizedTarget);
 
+		// Extract street number for fallback matching
+		String streetNumber = extractStreetNumber(targetAddress);
+		logger.info("Street number for fallback matching: '{}'", streetNumber);
+
+		// Log all addresses in the table for debugging
+		logger.info("Table has {} rows to search", rows.size());
+
 		for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
 			WebElement row = rows.get(rowIdx);
 			try {
@@ -5833,9 +6265,32 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 					String cellAddress = cells.get(addressColIndex).getText().trim();
 					String normalizedCell = normalizeAddress(cellAddress);
 
+					// Log each row address for debugging
+					if (rowIdx < 20) {
+						logger.debug("Row {}: Checking address '{}'", rowIdx, cellAddress);
+					}
+
 					if (normalizedCell.contains(normalizedTarget) || normalizedTarget.contains(normalizedCell)) {
 						logger.info("Row {}: Address match found - '{}' matches '{}'", rowIdx, cellAddress, targetAddress);
 						return row;
+					}
+
+					// Fallback: Match by street number if normalized match fails
+					if (streetNumber != null && !streetNumber.isEmpty()) {
+						String cellStreetNumber = extractStreetNumber(cellAddress);
+						if (cellStreetNumber != null && cellStreetNumber.equals(streetNumber)) {
+							// Additional check: verify city or state matches
+							String targetCity = extractCity(targetAddress);
+							String cellCity = extractCity(cellAddress);
+							if (targetCity != null && cellCity != null &&
+								(targetCity.equalsIgnoreCase(cellCity) ||
+								 normalizedCell.contains(targetCity.toLowerCase()) ||
+								 normalizedTarget.contains(cellCity.toLowerCase()))) {
+								logger.info("Row {}: Address match found by street number and city - '{}' matches '{}'",
+									rowIdx, cellAddress, targetAddress);
+								return row;
+							}
+						}
 					}
 				}
 
@@ -5858,8 +6313,53 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 			}
 		}
 
-		logger.warn("No row found matching address: '{}'", targetAddress);
+		logger.warn("No row found matching address: '{}'. Searched {} rows.", targetAddress, rows.size());
 		return null;
+	}
+
+	/**
+	 * Extract street number from address (e.g., "35875" from "35875 Warm Spgs Pkwy...")
+	 */
+	private String extractStreetNumber(String address) {
+		if (address == null) return null;
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^(\\d+)");
+		java.util.regex.Matcher matcher = pattern.matcher(address.trim());
+		if (matcher.find()) {
+			return matcher.group(1);
+		}
+		return null;
+	}
+
+	/**
+	 * Extract city from address (simple approach - get text before state abbreviation)
+	 */
+	private String extractCity(String address) {
+		if (address == null) return null;
+		// Try to find city name before state abbreviation (2-letter uppercase)
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(",\\s*([A-Za-z\\s]+),\\s*[A-Z]{2}");
+		java.util.regex.Matcher matcher = pattern.matcher(address);
+		if (matcher.find()) {
+			return matcher.group(1).trim();
+		}
+		return null;
+	}
+
+	/**
+	 * Check if address is in California (CA)
+	 * Checks for ", CA " or ", CA," or ", California" in the address
+	 * Overrides parent method with same visibility
+	 */
+	@Override
+	public boolean isCaliforniaAddress(String address) {
+		if (address == null || address.isEmpty()) return false;
+		String upperAddress = address.toUpperCase();
+		// Check for CA state abbreviation patterns
+		return upperAddress.contains(", CA ") ||
+			   upperAddress.contains(", CA,") ||
+			   upperAddress.contains(",CA ") ||
+			   upperAddress.contains(",CA,") ||
+			   upperAddress.contains(", CALIFORNIA") ||
+			   upperAddress.matches(".*,\\s*CA\\s*\\d{5}.*");
 	}
 
 	/**
@@ -5875,6 +6375,15 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 			.replaceAll("road", "rd")
 			.replaceAll("boulevard", "blvd")
 			.replaceAll("lane", "ln")
+			.replaceAll("parkway", "pkwy")
+			.replaceAll("court", "ct")
+			.replaceAll("circle", "cir")
+			.replaceAll("place", "pl")
+			.replaceAll("springs", "spgs")
+			.replaceAll("highway", "hwy")
+			.replaceAll("terrace", "ter")
+			.replaceAll("apartment", "apt")
+			.replaceAll("suite", "ste")
 			.replaceAll("[,.]", "")
 			.trim();
 	}
@@ -5964,6 +6473,30 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		int rowNum = 1;
 		for (LocationProRataCalculation calc : result.getLocationCalculations()) {
 			String bgColor = rowNum % 2 == 0 ? "#f8f9fa" : "#ffffff";
+
+			// Check if this location was skipped due to Arch + CA validation
+			if (calc.isSkippedDueToArchCA()) {
+				// Show skipped row with special formatting
+				html.append(String.format("<tr style='background-color: #fff3cd;'>")); // Yellow/warning background
+				html.append(String.format("<td style='padding: 4px; border: 1px solid #dee2e6; text-align: center;'>%d</td>", calc.getLocationNumber()));
+				html.append(String.format("<td style='padding: 4px; border: 1px solid #dee2e6;'>%s</td>",
+					truncateAddress(calc.getAddress(), 20)));
+				html.append("<td colspan='9' style='padding: 4px; border: 1px solid #dee2e6; text-align: center;'>");
+				html.append("<span style='color: #000000; font-weight: bold;'>SKIPPED - Arch does not cover California counties (Expected)</span>");
+				html.append("</td>");
+				html.append(String.format("<td style='padding: 4px; border: 1px solid #dee2e6; text-align: center; font-weight: bold; color: #28a745;'>PASS</td>"));
+				html.append("</tr>");
+
+				// Add explanation row
+				html.append(String.format("<tr style='background-color: #fff3cd;'>"));
+				html.append("<td colspan='12' style='padding: 4px 6px; border: 1px solid #dee2e6; font-size: 9px; color: #000000;'>");
+				html.append("<strong>Note:</strong> This California location was not added because Arch Specialty Insurance does not cover any County in California. This is expected behavior.");
+				html.append("</td></tr>");
+
+				rowNum++;
+				continue;
+			}
+
 			String overallStatus = calc.isAllMatched() ? "PASS" : "FAIL";
 			String overallStatusColor = calc.isAllMatched() ? "#28a745" : "#dc3545";
 			String propStatus = calc.isPropertyPremiumMatch() ? "PASS" : "FAIL";
@@ -5996,7 +6529,7 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 
 			// Add calculation details row
 			html.append(String.format("<tr style='background-color: #e9ecef;'>"));
-			html.append("<td colspan='12' style='padding: 4px 6px; border: 1px solid #dee2e6; font-size: 9px; color: #666;'>");
+			html.append("<td colspan='12' style='padding: 4px 6px; border: 1px solid #dee2e6; font-size: 9px; color: #000000;'>");
 			html.append(String.format("<strong>Property:</strong> ($%.0f+$%.0f+$%.0f+$%.0f)×%.4f/100=$%.2f/yr → $%.4f/day × %d days = <strong>$%.2f</strong> | ",
 				calc.getCoverageA(), calc.getCoverageB(), calc.getCoverageC(), calc.getCoverageD(),
 				calc.getRate(), calc.getTotalAnnualPremium(), calc.getPerDayPremium(),
@@ -6083,6 +6616,7 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		private boolean propertyPremiumMatch;
 		private boolean allMatched;
 		private String error;
+		private boolean skippedDueToArchCA;
 
 		public int getLocationNumber() { return locationNumber; }
 		public void setLocationNumber(int v) { this.locationNumber = v; }
@@ -6143,6 +6677,8 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 		public void setAllMatched(boolean v) { this.allMatched = v; }
 		public String getError() { return error; }
 		public void setError(String v) { this.error = v; }
+		public boolean isSkippedDueToArchCA() { return skippedDueToArchCA; }
+		public void setSkippedDueToArchCA(boolean v) { this.skippedDueToArchCA = v; }
 	}
 
 	// ==================== Validation Against Create Endorsement Data ====================
@@ -7081,6 +7617,415 @@ public class EditPremiumEndorsementPage extends CreatePremiumEndorsementLocators
 	public PremiumValidationResult validateEditEndorsementPremiums() {
 		logger.info("=== Validating Edit Endorsement Premium Calculations ===");
 		return validateEndorsementPremiums();
+	}
+
+	// ==================== PDF Download and Validation Methods ====================
+
+	/**
+	 * Click Download Endorsement button and wait for PDF to download
+	 * @param downloadDir Directory where PDF will be downloaded (e.g., C:\Users\HP\Downloads\)
+	 * @param timeoutSeconds Maximum time to wait for download
+	 * @return Path to downloaded PDF file, or null if download failed
+	 */
+	public String clickDownloadEndorsementAndWait(String downloadDir, int timeoutSeconds) {
+		logger.info("=== Clicking Download Endorsement Button ===");
+
+		try {
+			// Get list of existing PDF files before download
+			java.io.File downloadFolder = new java.io.File(downloadDir);
+			java.util.Set<String> existingPdfs = new java.util.HashSet<>();
+			if (downloadFolder.exists() && downloadFolder.isDirectory()) {
+				for (java.io.File file : downloadFolder.listFiles()) {
+					if (file.getName().toLowerCase().endsWith(".pdf")) {
+						existingPdfs.add(file.getAbsolutePath());
+					}
+				}
+			}
+			logger.info("Found {} existing PDF files in download directory", existingPdfs.size());
+
+			// Find and click Download Endorsement button
+			WebElement downloadButton = findDownloadEndorsementButton();
+			if (downloadButton == null) {
+				logger.error("Download Endorsement button not found");
+				captureEndorsementScreenshot("Download Button Not Found");
+				return null;
+			}
+
+			captureEndorsementScreenshot("Before Download Endorsement Click");
+
+			// Click the download button
+			try {
+				((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", downloadButton);
+				Thread.sleep(500);
+				downloadButton.click();
+				logger.info("Clicked Download Endorsement button");
+			} catch (Exception e) {
+				logger.warn("Regular click failed, trying JavaScript click: {}", e.getMessage());
+				((JavascriptExecutor) driver).executeScript("arguments[0].click();", downloadButton);
+			}
+
+			// Wait for PDF file to appear in download directory
+			logger.info("Waiting for PDF download (max {} seconds)...", timeoutSeconds);
+			long startTime = System.currentTimeMillis();
+			long timeout = timeoutSeconds * 1000L;
+			String downloadedPdfPath = null;
+
+			while (System.currentTimeMillis() - startTime < timeout) {
+				Thread.sleep(1000);
+
+				// Check for new PDF files
+				if (downloadFolder.exists() && downloadFolder.isDirectory()) {
+					for (java.io.File file : downloadFolder.listFiles()) {
+						String filePath = file.getAbsolutePath();
+						if (file.getName().toLowerCase().endsWith(".pdf") && !existingPdfs.contains(filePath)) {
+							// Check if file is still being downloaded (.crdownload for Chrome)
+							if (!file.getName().endsWith(".crdownload") && file.length() > 0) {
+								// Additional check - wait a bit more to ensure download is complete
+								Thread.sleep(2000);
+								if (file.exists() && file.length() > 0) {
+									downloadedPdfPath = filePath;
+									logger.info("PDF downloaded successfully: {}", downloadedPdfPath);
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				if (downloadedPdfPath != null) {
+					break;
+				}
+			}
+
+			if (downloadedPdfPath == null) {
+				logger.error("PDF download timed out after {} seconds", timeoutSeconds);
+				captureEndorsementScreenshot("PDF Download Timeout");
+			} else {
+				captureEndorsementScreenshot("PDF Downloaded Successfully");
+			}
+
+			return downloadedPdfPath;
+
+		} catch (Exception e) {
+			logger.error("Error during PDF download: {}", e.getMessage());
+			captureEndorsementScreenshot("PDF Download Error");
+			return null;
+		}
+	}
+
+	/**
+	 * Find the Download Endorsement button using multiple strategies
+	 */
+	private WebElement findDownloadEndorsementButton() {
+		String[] buttonXpaths = {
+			"//button[contains(text(),'Download Endorsement')]",
+			"//button[contains(.,'Download Endorsement')]",
+			"//*[contains(text(),'Download Endorsement')]/ancestor::button",
+			"//button[contains(@class,'download')]",
+			"//*[@id='download-endorsement-button']",
+			"//button[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'download')]",
+			"//a[contains(text(),'Download Endorsement')]",
+			"//button[.//span[contains(text(),'Download')]]"
+		};
+
+		WebDriverWait shortWait = new WebDriverWait(driver, java.time.Duration.ofSeconds(5));
+
+		for (String xpath : buttonXpaths) {
+			try {
+				WebElement button = shortWait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(xpath)));
+				if (button != null && button.isDisplayed()) {
+					logger.info("Found Download Endorsement button with xpath: {}", xpath);
+					return button;
+				}
+			} catch (Exception e) {
+				// Try next xpath
+			}
+		}
+
+		// Try finding by partial text match
+		try {
+			java.util.List<WebElement> allButtons = driver.findElements(By.tagName("button"));
+			for (WebElement btn : allButtons) {
+				String text = btn.getText().toLowerCase();
+				if (text.contains("download") && (text.contains("endorsement") || text.contains("pdf"))) {
+					logger.info("Found Download button by text search: {}", btn.getText());
+					return btn;
+				}
+			}
+		} catch (Exception e) {
+			logger.warn("Error searching buttons by text: {}", e.getMessage());
+		}
+
+		return null;
+	}
+
+	/**
+	 * Capture Location History table data from frontend
+	 * @return List of LocationHistoryEntry objects
+	 */
+	public java.util.List<LocationHistoryEntry> captureLocationHistoryTable() {
+		logger.info("=== Capturing Location History Table ===");
+		java.util.List<LocationHistoryEntry> entries = new java.util.ArrayList<>();
+
+		try {
+			// Find Location History table - try multiple selectors
+			String[] tableXpaths = {
+				"//h3[contains(text(),'Location History')]/following-sibling::table",
+				"//h3[contains(text(),'Location History')]/following::table[1]",
+				"//*[contains(text(),'Location History')]/ancestor::div//table",
+				"//div[contains(@class,'location-history')]//table",
+				"//table[.//th[contains(text(),'Cert ID')]]",
+				"//table[.//th[contains(text(),'Address')]]"
+			};
+
+			WebElement historyTable = null;
+			for (String xpath : tableXpaths) {
+				try {
+					historyTable = driver.findElement(By.xpath(xpath));
+					if (historyTable != null && historyTable.isDisplayed()) {
+						logger.info("Found Location History table with xpath: {}", xpath);
+						break;
+					}
+				} catch (Exception e) {
+					// Try next xpath
+				}
+			}
+
+			if (historyTable == null) {
+				logger.warn("Location History table not found, trying to find any table with location data");
+				// Try to find table by looking for rows with location data pattern
+				java.util.List<WebElement> tables = driver.findElements(By.tagName("table"));
+				for (WebElement table : tables) {
+					String tableText = table.getText().toLowerCase();
+					if (tableText.contains("arch") && (tableText.contains("dwelling") || tableText.contains("premium"))) {
+						historyTable = table;
+						logger.info("Found potential Location History table");
+						break;
+					}
+				}
+			}
+
+			if (historyTable == null) {
+				logger.error("Could not find Location History table");
+				captureEndorsementScreenshot("Location History Table Not Found");
+				return entries;
+			}
+
+			// Parse table rows
+			java.util.List<WebElement> rows = historyTable.findElements(By.tagName("tr"));
+			boolean headerFound = false;
+			int certIdCol = -1, addressCol = -1, dwellingCol = -1, structuresCol = -1;
+			int bppCol = -1, rentsCol = -1, tivCol = -1, premiumCol = -1;
+			int glCol = -1, wsCol = -1, taxCol = -1, totalCol = -1;
+
+			for (WebElement row : rows) {
+				java.util.List<WebElement> cells = row.findElements(By.tagName("td"));
+				if (cells.isEmpty()) {
+					// Check for header row
+					java.util.List<WebElement> headers = row.findElements(By.tagName("th"));
+					if (!headers.isEmpty()) {
+						headerFound = true;
+						for (int i = 0; i < headers.size(); i++) {
+							String headerText = headers.get(i).getText().toLowerCase();
+							if (headerText.contains("cert")) certIdCol = i;
+							else if (headerText.contains("address")) addressCol = i;
+							else if (headerText.contains("dwelling") || headerText.contains("cov a")) dwellingCol = i;
+							else if (headerText.contains("structure") || headerText.contains("cov b")) structuresCol = i;
+							else if (headerText.contains("personal") || headerText.contains("bpp") || headerText.contains("cov c")) bppCol = i;
+							else if (headerText.contains("rent") || headerText.contains("cov d")) rentsCol = i;
+							else if (headerText.contains("tiv")) tivCol = i;
+							else if (headerText.contains("property") && headerText.contains("premium")) premiumCol = i;
+							else if (headerText.contains("gl") || headerText.contains("liability")) glCol = i;
+							else if (headerText.contains("water") || headerText.contains("ws")) wsCol = i;
+							else if (headerText.contains("tax")) taxCol = i;
+							else if (headerText.contains("total")) totalCol = i;
+						}
+						logger.debug("Header columns - CertID:{}, Address:{}, Dwelling:{}, Structures:{}, BPP:{}, Rents:{}, TIV:{}, Premium:{}",
+							certIdCol, addressCol, dwellingCol, structuresCol, bppCol, rentsCol, tivCol, premiumCol);
+						continue;
+					}
+				}
+
+				if (cells.size() >= 3) {
+					LocationHistoryEntry entry = new LocationHistoryEntry();
+
+					// Try to parse cells based on identified columns or by position
+					if (certIdCol >= 0 && certIdCol < cells.size()) {
+						entry.certId = cells.get(certIdCol).getText().trim();
+					} else if (cells.size() > 0) {
+						String firstCell = cells.get(0).getText().trim();
+						if (firstCell.startsWith("ARCH")) {
+							entry.certId = firstCell;
+						}
+					}
+
+					if (addressCol >= 0 && addressCol < cells.size()) {
+						entry.address = cells.get(addressCol).getText().trim();
+					} else if (cells.size() > 1) {
+						entry.address = cells.get(1).getText().trim();
+					}
+
+					// Parse numeric values
+					entry.dwelling = parseTableCurrency(cells, dwellingCol, 2);
+					entry.structures = parseTableCurrency(cells, structuresCol, 3);
+					entry.bpp = parseTableCurrency(cells, bppCol, 4);
+					entry.rents = parseTableCurrency(cells, rentsCol, 5);
+					entry.tiv = parseTableCurrency(cells, tivCol, 6);
+					entry.propertyPremium = parseTableCurrency(cells, premiumCol, 7);
+					entry.glPremium = parseTableCurrency(cells, glCol, 8);
+					entry.wsPremium = parseTableCurrency(cells, wsCol, 9);
+					entry.taxes = parseTableCurrency(cells, taxCol, 10);
+					entry.totalPremium = parseTableCurrency(cells, totalCol, 11);
+
+					if (entry.certId != null && !entry.certId.isEmpty()) {
+						entries.add(entry);
+						logger.debug("Parsed Location History entry: {} - {}", entry.certId, entry.address);
+					}
+				}
+			}
+
+			logger.info("Captured {} Location History entries", entries.size());
+			captureEndorsementScreenshot("Location History Table Captured");
+
+		} catch (Exception e) {
+			logger.error("Error capturing Location History table: {}", e.getMessage());
+			captureEndorsementScreenshot("Location History Capture Error");
+		}
+
+		return entries;
+	}
+
+	/**
+	 * Parse currency value from table cell
+	 */
+	private double parseTableCurrency(java.util.List<WebElement> cells, int colIndex, int defaultIndex) {
+		int index = colIndex >= 0 ? colIndex : defaultIndex;
+		if (index >= 0 && index < cells.size()) {
+			String text = cells.get(index).getText().trim();
+			return parseCurrencyString(text);
+		}
+		return 0.0;
+	}
+
+	/**
+	 * Parse currency string to double
+	 */
+	private double parseCurrencyString(String value) {
+		if (value == null || value.isEmpty()) return 0.0;
+		try {
+			return Double.parseDouble(value.replaceAll("[^\\d.-]", ""));
+		} catch (NumberFormatException e) {
+			return 0.0;
+		}
+	}
+
+	/**
+	 * Location History entry from frontend table
+	 */
+	public static class LocationHistoryEntry {
+		public String certId;
+		public String address;
+		public double dwelling;
+		public double structures;
+		public double bpp;
+		public double rents;
+		public double tiv;
+		public double propertyPremium;
+		public double glPremium;
+		public double wsPremium;
+		public double taxes;
+		public double totalPremium;
+
+		public double calculateTIV() {
+			return dwelling + structures + bpp + rents;
+		}
+
+		@Override
+		public String toString() {
+			return String.format("LocationHistoryEntry{certId='%s', address='%s', dwelling=%.2f, tiv=%.2f, total=%.2f}",
+				certId, address, dwelling, tiv, totalPremium);
+		}
+	}
+
+	/**
+	 * Get all form values from Edit Endorsement page for PDF validation
+	 */
+	public java.util.Map<String, String> getEndorsementFormValues() {
+		java.util.Map<String, String> values = new java.util.LinkedHashMap<>();
+
+		try {
+			values.put("PolicyId", getPolicyId());
+			values.put("EffectiveDateOfEndorsement", getEndorsementEffectiveDate());
+			values.put("EffectiveDate", getEffectiveDate());
+			values.put("ExpirationDate", getExpirationDate());
+			values.put("Carrier", getSelectedCarrier());
+
+			// Get premium values from the form
+			values.put("GL", getGLPremiumValue());
+			values.put("WS", getWSPremiumValue());
+
+			logger.info("Captured form values: PolicyId={}, EffectiveDate={}, ExpirationDate={}",
+				values.get("PolicyId"), values.get("EffectiveDate"), values.get("ExpirationDate"));
+
+		} catch (Exception e) {
+			logger.error("Error capturing form values: {}", e.getMessage());
+		}
+
+		return values;
+	}
+
+	/**
+	 * Get Policy ID from form
+	 */
+	private String getPolicyId() {
+		try {
+			// Try multiple approaches to get Policy ID
+			String[] xpaths = {
+				"//*[contains(text(),'Policy ID')]/following-sibling::*",
+				"//*[contains(text(),'Policy ID')]/following::*[1]",
+				"//label[contains(text(),'Policy')]/following-sibling::*",
+				"//*[@id='policy-id']",
+				"//*[contains(@class,'policy-id')]"
+			};
+			for (String xpath : xpaths) {
+				try {
+					WebElement elem = driver.findElement(By.xpath(xpath));
+					String text = elem.getText().trim();
+					if (text != null && !text.isEmpty() && text.contains("ARCH")) {
+						return text;
+					}
+				} catch (Exception e) {
+					// Try next
+				}
+			}
+		} catch (Exception e) {
+			logger.warn("Could not get Policy ID: {}", e.getMessage());
+		}
+		return "";
+	}
+
+	/**
+	 * Get GL Premium value from form
+	 */
+	private String getGLPremiumValue() {
+		try {
+			WebElement glField = driver.findElement(By.id("edit-endorsement-general-liability-amount-input"));
+			return glField.getAttribute("value");
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	/**
+	 * Get WS Premium value from form
+	 */
+	private String getWSPremiumValue() {
+		try {
+			WebElement wsField = driver.findElement(By.id("edit-endorsement-water-sewer-backup-amount-input"));
+			return wsField.getAttribute("value");
+		} catch (Exception e) {
+			return "";
+		}
 	}
 }
 

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="CPI Edit Flat Cancel Test Suite" verbose="1">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.TestListener"/>
+    </listeners>
+
+    <test name="Edit Flat Cancel Tests">
+        <groups>
+            <run>
+                <include name="smoke"/>
+                <include name="editflatcancel"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.EditFlatCancelTest">
+                <methods>
+                    <include name="testLoginWithValidCredentials"/>
+                    <include name="testClickSkipButtonOnResetPage"/>
+                    <include name="testNavigateToHomePage"/>
+                    <include name="testClickOnManagePolicyLink"/>
+                    <include name="testNavigateToCreateCancelAddressPage"/>
+                    <include name="testSelectEditFlatCancelCertificates"/>
+                    <include name="testExtractEditCertificateDetails"/>
+                    <include name="testClickBindAndValidateDialogue"/>
+                    <include name="testValidateCancelledCertificatesNotOnMasterPolicy"/>
+                    <include name="testValidateFlatCancelPDFFromBindHistory"/>
+                    <include name="testGenerateFinalReport"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+</suite>

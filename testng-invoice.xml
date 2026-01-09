@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="CPI Invoice Test Suite" verbose="1">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.TestListener"/>
+        <!-- RetryListener removed to prevent multiple test executions -->
+    </listeners>
+
+    <test name="Invoice Search Tests">
+        <groups>
+            <run>
+                <include name="smoke"/>
+                <include name="invoice"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.InvoiceTest">
+                <methods>
+                    <include name="testLoginWithValidCredentials"/>
+                    <include name="testClickSkipButtonOnResetPage"/>
+                    <include name="testNavigateToHomePage"/>
+                    <include name="testClickOnInvoiceLink"/>
+                    <include name="testProcessAllPoliciesFromExcel"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+
+</suite>

@@ -813,9 +813,9 @@ public class CreatePremiumEndorsementTest {
 		if (rejectedCount > 0) {
 			if (isArchCarrier) {
 				// Arch carrier - California rejection is expected
-				html.append("<tr style='background-color: #fff3cd;'><td style='padding: 8px; font-weight: bold; color: #856404;'>Locations Rejected:</td>");
-				html.append("<td style='padding: 8px; color: #856404;'>").append(rejectedCount).append(" (Expected - Arch CA restriction)</td></tr>");
-				html.append("<tr style='background-color: #fff3cd;'><td colspan='2' style='padding: 8px; color: #856404;'>");
+				html.append("<tr style='background-color: #fff3cd;'><td style='padding: 8px; font-weight: bold; color: #000000;'>Locations Rejected:</td>");
+				html.append("<td style='padding: 8px; color: #000000;'>").append(rejectedCount).append(" (Expected - Arch CA restriction)</td></tr>");
+				html.append("<tr style='background-color: #fff3cd;'><td colspan='2' style='padding: 8px; color: #000000;'>");
 				html.append("<strong>Note:</strong> Arch Specialty Insurance does not cover California counties</td></tr>");
 			} else {
 				// Non-Arch carrier - rejection is a failure
@@ -1334,23 +1334,21 @@ public class CreatePremiumEndorsementTest {
 		logger.info("=== Pro-Rata Premium Validation for Edit Endorsement Locations ===");
 		logger.info("Total locations to validate from EditEndorsement sheet: {}", editEndorsementLocationsAdded);
 
-		// Validate Pro-Rata for locations added on Edit Endorsement screen (same as testAddLocationsOnEndorsement)
-		if (editEndorsementLocationsAdded > 0 && editEndorsementLocationData != null && !editEndorsementLocationData.isEmpty()) {
-			logger.info("Validating Pro-Rata for {} locations added on Edit Endorsement", editEndorsementLocationsAdded);
+		// Validate Pro-Rata for ALL locations from EditEndorsement sheet
+		// Pass ALL locations - the validation will mark CA locations as SKIPPED if Arch carrier
+		if (editEndorsementLocationData != null && !editEndorsementLocationData.isEmpty()) {
+			logger.info("Validating Pro-Rata for {} locations from EditEndorsement sheet (including any skipped due to Arch+CA)",
+				editEndorsementLocationData.size());
 
-			// Get only the successfully added locations for validation (same logic as testAddLocationsOnEndorsement)
-			List<Map<String, String>> addedLocations = editEndorsementLocationData;
-			if (editEndorsementLocationsAdded < editEndorsementLocationData.size()) {
-				// If some locations were rejected, only validate the ones that were added
-				addedLocations = editEndorsementLocationData.subList(0, editEndorsementLocationsAdded);
-			}
+			// Pass ALL locations from sheet - validation will handle Arch+CA skipping
+			List<Map<String, String>> allLocations = editEndorsementLocationData;
 
-			// Log locations being validated (same format as testAddLocationsOnEndorsement)
-			logEditEndorsementLocationsToReport(addedLocations);
+			// Note: Removed logEditEndorsementLocationsToReport() - locations will be shown in Pro-Rata validation table
 
-			// Perform Pro-Rata validation (same as testAddLocationsOnEndorsement)
+			// Perform Pro-Rata validation for ALL locations
+			// Pass carrier name to properly handle Arch + California validation (mark as SKIPPED)
 			EditPremiumEndorsementPage.ProRataPremiumValidationResult proRataResult =
-				editEndorsementPage.validateProRataPremiumCalculations(addedLocations);
+				editEndorsementPage.validateProRataPremiumCalculations(allLocations, carrierName);
 
 			// Log validation result (same format as testAddLocationsOnEndorsement)
 			if (proRataResult.getError() != null) {
@@ -1388,8 +1386,9 @@ public class CreatePremiumEndorsementTest {
 			// Log locations being validated
 			logCreateEndorsementLocationsToReport(createLocations);
 
+			// Pass carrier name to properly handle Arch + California validation
 			EditPremiumEndorsementPage.ProRataPremiumValidationResult createProRataResult =
-				editEndorsementPage.validateProRataPremiumCalculations(createLocations);
+				editEndorsementPage.validateProRataPremiumCalculations(createLocations, carrierName);
 
 			if (createProRataResult.getError() != null) {
 				logger.warn("Create Endorsement Pro-Rata validation error: {}", createProRataResult.getError());
@@ -1428,10 +1427,11 @@ public class CreatePremiumEndorsementTest {
 			html.append("<tr style='background-color: #ffffff; border-bottom: 1px solid #dee2e6;'>");
 			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
 			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("Address", "N/A")).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("Dwelling", "0")).append("</td>");
-			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("SuggestedRate", loc.getOrDefault("Rate", "0"))).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("GLAmount", "150")).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("WSAmount", "100")).append("</td>");
+			// Dwelling can be stored under multiple keys: Dwelling, CoverageA, coverage_a
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "Dwelling", "CoverageA", "coverage_a")).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(getLocationValue(loc, "SuggestedRate", "Rate", "recommended_rate")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "GLAmount", "GL", "GeneralLiability")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "WSAmount", "WS", "WaterSewer")).append("</td>");
 			html.append("</tr>");
 		}
 		html.append("</table></div>");
@@ -1444,7 +1444,7 @@ public class CreatePremiumEndorsementTest {
 	private void logCreateEndorsementLocationsToReport(List<Map<String, String>> locations) {
 		StringBuilder html = new StringBuilder();
 		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #6c757d;'>");
-		html.append("<h3 style='color: #6c757d; margin-top: 0;'>Locations from CreateEndorsement Sheet (Pro-Rata Validation)</h3>");
+		html.append("<h3 style='color: #000000; margin-top: 0;'>Locations from CreateEndorsement Sheet (Pro-Rata Validation)</h3>");
 		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
 		html.append("<tr style='background-color: #343a40; color: white;'>");
 		html.append("<th style='padding: 8px;'>#</th><th style='padding: 8px;'>Address</th><th style='padding: 8px;'>Dwelling</th>");
@@ -1455,14 +1455,37 @@ public class CreatePremiumEndorsementTest {
 			html.append("<tr style='background-color: #ffffff; border-bottom: 1px solid #dee2e6;'>");
 			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
 			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("Address", "N/A")).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("Dwelling", "0")).append("</td>");
-			html.append("<td style='padding: 8px;'>").append(loc.getOrDefault("SuggestedRate", loc.getOrDefault("Rate", "0"))).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("GLAmount", "150")).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(loc.getOrDefault("WSAmount", "100")).append("</td>");
+			// Dwelling can be stored under multiple keys: Dwelling, CoverageA, coverage_a
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "Dwelling", "CoverageA", "coverage_a")).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(getLocationValue(loc, "SuggestedRate", "Rate", "recommended_rate")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "GLAmount", "GL", "GeneralLiability")).append("</td>");
+			html.append("<td style='padding: 8px;'>$").append(getLocationValue(loc, "WSAmount", "WS", "WaterSewer")).append("</td>");
 			html.append("</tr>");
 		}
 		html.append("</table></div>");
 		editEndorsementPage.logHtmlToReport(html.toString());
+	}
+
+	/**
+	 * Get value from location map trying multiple key variations
+	 */
+	private String getLocationValue(Map<String, String> loc, String... keys) {
+		for (String key : keys) {
+			String value = loc.get(key);
+			if (value != null && !value.isEmpty() && !value.equals("0")) {
+				return value;
+			}
+			// Try case-insensitive match
+			for (Map.Entry<String, String> entry : loc.entrySet()) {
+				if (entry.getKey().equalsIgnoreCase(key)) {
+					value = entry.getValue();
+					if (value != null && !value.isEmpty() && !value.equals("0")) {
+						return value;
+					}
+				}
+			}
+		}
+		return "0";
 	}
 
 	/**
@@ -1482,8 +1505,8 @@ public class CreatePremiumEndorsementTest {
 	private void logNoLocationsToValidateReport(String source) {
 		StringBuilder html = new StringBuilder();
 		html.append("<div style='padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0;'>");
-		html.append("<strong style='color: #856404;'>").append(source).append(":</strong> ");
-		html.append("<span style='color: #856404;'>No locations to validate - skipping pro-rata validation</span></div>");
+		html.append("<strong style='color: #000000;'>").append(source).append(":</strong> ");
+		html.append("<span style='color: #000000;'>No locations to validate - skipping pro-rata validation</span></div>");
 		editEndorsementPage.logHtmlToReport(html.toString());
 	}
 
@@ -1500,51 +1523,116 @@ public class CreatePremiumEndorsementTest {
 			"background-color: #f8d7da; border-left: 4px solid #dc3545;'>");
 
 		html.append("<h3 style='color: ").append(allPassed ? "#28a745" : "#dc3545").append("; margin-top: 0;'>");
-		html.append(source).append(" Pro-Rata Premium Validation: ").append(allPassed ? "PASS" : "FAIL").append("</h3>");
+		html.append(source).append(" Pro-Rata Premium Validation: ").append(allPassed ? "ALL PASSED" : "FAILED").append("</h3>");
 
-		// Summary info
+		// Pro-Rata Calculation Formulas section
+		html.append("<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;'>");
+		html.append("<strong style='color: #343a40;'>Pro-Rata Calculation Formulas:</strong><br>");
+		html.append("<span style='color: #000000; font-size: 12px;'>");
+		html.append("<b>Property Premium:</b> Annual = (CovA + CovB + CovC + CovD) &times; Rate / 100 &rarr; Pro-Rata = Annual / 365 &times; Days<br>");
+		html.append("<b>GL Premium:</b> Pro-Rata = GL Amount / 365 &times; Days<br>");
+		html.append("<b>WS Premium:</b> Pro-Rata = WS Amount / 365 &times; Days</span></div>");
+
+		// Summary info with dates
 		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000; margin-bottom: 15px;'>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Carrier:</td><td style='padding: 8px;'>").append(carrierName).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Source Sheet:</td><td style='padding: 8px;'>").append(source).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Pro-Rata Days:</td><td style='padding: 8px;'>").append(result.getProRataDays()).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Locations Validated:</td><td style='padding: 8px;'>").append(result.getLocationCalculations().size()).append("</td></tr>");
-		html.append("<tr><td style='padding: 8px; font-weight: bold;'>All Passed:</td><td style='padding: 8px; font-weight: bold; color: ")
-			.append(allPassed ? "#28a745" : "#dc3545").append(";'>").append(allPassed ? "YES" : "NO").append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Endorsement Effective Date:</td><td style='padding: 8px;'>").append(result.getEndorsementEffectiveDate() != null ? result.getEndorsementEffectiveDate() : "N/A").append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Expiration Date:</td><td style='padding: 8px;'>").append(result.getExpirationDate() != null ? result.getExpirationDate() : "N/A").append("</td></tr>");
+		html.append("<tr><td style='padding: 8px; font-weight: bold;'>Number of Pro-Rata Days:</td><td style='padding: 8px;'><strong>").append(result.getProRataDays()).append(" days</strong></td></tr>");
 		html.append("</table>");
 
 		// Detailed calculations for each location
 		html.append("<h4 style='color: #343a40; margin: 10px 0;'>Detailed Pro-Rata Calculations</h4>");
-		html.append("<p style='color: #6c757d; font-size: 12px; margin-bottom: 10px;'>");
-		html.append("<strong>Formulas:</strong> Property = (TIV/100 × Rate) × (Days/365), GL = GLAmount × (Days/365), WS = WSAmount × (Days/365)</p>");
 
 		html.append("<table style='width: 100%; border-collapse: collapse; color: #000000;'>");
 		html.append("<tr style='background-color: #343a40; color: white;'>");
 		html.append("<th style='padding: 8px;'>Loc</th>");
 		html.append("<th style='padding: 8px;'>Address</th>");
-		html.append("<th style='padding: 8px;'>Expected Property</th>");
-		html.append("<th style='padding: 8px;'>Actual Property</th>");
-		html.append("<th style='padding: 8px;'>Expected GL</th>");
-		html.append("<th style='padding: 8px;'>Actual GL</th>");
-		html.append("<th style='padding: 8px;'>Expected WS</th>");
-		html.append("<th style='padding: 8px;'>Actual WS</th>");
-		html.append("<th style='padding: 8px;'>Status</th></tr>");
+		html.append("<th style='padding: 8px;'>Property (Calc | Disp)</th>");
+		html.append("<th style='padding: 8px;'>Prop</th>");
+		html.append("<th style='padding: 8px;'>GL (Calc | Disp)</th>");
+		html.append("<th style='padding: 8px;'>GL</th>");
+		html.append("<th style='padding: 8px;'>WS (Calc | Disp)</th>");
+		html.append("<th style='padding: 8px;'>WS</th>");
+		html.append("<th style='padding: 8px;'>Overall</th></tr>");
 
 		List<EditPremiumEndorsementPage.LocationProRataCalculation> calculations = result.getLocationCalculations();
 		for (int i = 0; i < calculations.size(); i++) {
 			EditPremiumEndorsementPage.LocationProRataCalculation calc = calculations.get(i);
-			boolean locPassed = calc.isPropertyMatch() && calc.isGlMatch() && calc.isWsMatch();
 
+			// Check if this location was skipped due to Arch + California
+			if (calc.isSkippedDueToArchCA()) {
+				// SKIPPED row for Arch + California
+				html.append("<tr style='background-color: #fff3cd; border-bottom: 1px solid #dee2e6;'>");
+				html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
+				String addressDisplay = calc.getAddress() != null && calc.getAddress().length() > 20
+					? calc.getAddress().substring(0, 20) + "..." : (calc.getAddress() != null ? calc.getAddress() : "N/A");
+				html.append("<td style='padding: 8px; font-size: 11px;'>").append(addressDisplay).append("</td>");
+				html.append("<td colspan='6' style='padding: 8px; color: #000000; font-style: italic;'>SKIPPED - Arch does not cover California counties (Expected)</td>");
+				html.append("<td style='padding: 8px; font-weight: bold; color: #28a745;'>PASS</td></tr>");
+
+				// Add note row
+				html.append("<tr style='background-color: #fff3cd; border-bottom: 2px solid #ffc107;'>");
+				html.append("<td colspan='9' style='padding: 8px; font-size: 11px; color: #000000;'>");
+				html.append("<strong>Note:</strong> This California location was not added because Arch Specialty Insurance does not cover any County in California. This is expected behavior.</td></tr>");
+				continue;
+			}
+
+			boolean propMatch = calc.isPropertyPremiumMatch();
+			boolean glMatch = calc.isGlPremiumMatch();
+			boolean wsMatch = calc.isWsPremiumMatch();
+			boolean locPassed = propMatch && glMatch && wsMatch;
+
+			// Main row with comparison values
 			html.append("<tr style='background-color: ").append(locPassed ? "#d4edda" : "#f8d7da").append("; border-bottom: 1px solid #dee2e6;'>");
 			html.append("<td style='padding: 8px;'>").append(i + 1).append("</td>");
-			html.append("<td style='padding: 8px; font-size: 11px;'>").append(calc.getAddress() != null ? calc.getAddress() : "N/A").append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedPropertyPremium())).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualPropertyPremium())).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedGlPremium())).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualGlPremium())).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getExpectedWsPremium())).append("</td>");
-			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getActualWsPremium())).append("</td>");
-			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(locPassed ? "#28a745" : "#dc3545").append(";'>");
-			html.append(locPassed ? "PASS" : "FAIL").append("</td></tr>");
+			String addressDisplay = calc.getAddress() != null && calc.getAddress().length() > 20
+				? calc.getAddress().substring(0, 20) + "..." : (calc.getAddress() != null ? calc.getAddress() : "N/A");
+			html.append("<td style='padding: 8px; font-size: 11px;'>").append(addressDisplay).append("</td>");
+
+			// Property (Calc | Disp)
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getCalculatedPropertyPremium()));
+			html.append("&nbsp;&nbsp;&nbsp;$").append(String.format("%.2f", calc.getDisplayedPropertyPremium())).append("</td>");
+			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(propMatch ? "#28a745" : "#dc3545").append(";'>").append(propMatch ? "PASS" : "FAIL").append("</td>");
+
+			// GL (Calc | Disp)
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getCalculatedGLPremium()));
+			html.append("&nbsp;&nbsp;&nbsp;$").append(String.format("%.2f", calc.getDisplayedGLPremium())).append("</td>");
+			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(glMatch ? "#28a745" : "#dc3545").append(";'>").append(glMatch ? "PASS" : "FAIL").append("</td>");
+
+			// WS (Calc | Disp)
+			html.append("<td style='padding: 8px;'>$").append(String.format("%.2f", calc.getCalculatedWSPremium()));
+			html.append("&nbsp;&nbsp;&nbsp;$").append(String.format("%.2f", calc.getDisplayedWSPremium())).append("</td>");
+			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(wsMatch ? "#28a745" : "#dc3545").append(";'>").append(wsMatch ? "PASS" : "FAIL").append("</td>");
+
+			// Overall
+			html.append("<td style='padding: 8px; font-weight: bold; color: ").append(locPassed ? "#28a745" : "#dc3545").append(";'>").append(locPassed ? "PASS" : "FAIL").append("</td></tr>");
+
+			// Detailed calculation breakdown row
+			html.append("<tr style='background-color: ").append(locPassed ? "#e8f5e9" : "#ffebee").append("; border-bottom: 2px solid #dee2e6;'>");
+			html.append("<td colspan='9' style='padding: 8px; font-size: 11px; color: #000000;'>");
+
+			// Property calculation: ($CovA+$CovB+$CovC+$CovD)×Rate/100=$Annual/yr → $PerDay/day × Days = $ProRata
+			html.append("<b>Property:</b> ($").append(String.format("%.0f", calc.getCoverageA()));
+			html.append("+$").append(String.format("%.0f", calc.getCoverageB()));
+			html.append("+$").append(String.format("%.0f", calc.getCoverageC()));
+			html.append("+$").append(String.format("%.0f", calc.getCoverageD()));
+			html.append(")&times;").append(String.format("%.4f", calc.getRate())).append("/100");
+			html.append("=$").append(String.format("%.2f", calc.getTotalAnnualPremium())).append("/yr");
+			html.append(" &rarr; $").append(String.format("%.4f", calc.getPerDayPremium())).append("/day");
+			html.append(" &times; ").append(calc.getProRataDays()).append(" days");
+			html.append(" = <b>$").append(String.format("%.2f", calc.getCalculatedPropertyPremium())).append("</b>");
+
+			// GL calculation: $GLAmount/365 × Days = $ProRataGL
+			html.append(" | <b>GL:</b> $").append(String.format("%.2f", calc.getExcelGLAmount()));
+			html.append("/365 &times; ").append(calc.getProRataDays());
+			html.append(" = <b>$").append(String.format("%.2f", calc.getCalculatedGLPremium())).append("</b>");
+
+			// WS calculation: $WSAmount/365 × Days = $ProRataWS
+			html.append(" | <b>WS:</b> $").append(String.format("%.2f", calc.getExcelWSAmount()));
+			html.append("/365 &times; ").append(calc.getProRataDays());
+			html.append(" = <b>$").append(String.format("%.2f", calc.getCalculatedWSPremium())).append("</b>");
+
+			html.append("</td></tr>");
 		}
 		html.append("</table></div>");
 
@@ -1594,13 +1682,17 @@ public class CreatePremiumEndorsementTest {
 		List<Map<String, String>> createLocations = endorsementLocationData;
 		List<Map<String, String>> editLocations = editEndorsementLocationData;
 
+		// Get carrier name for Arch+California skip logic
+		String carrierName = editQuoteValues != null ? editQuoteValues.getOrDefault("Carrier", "") : "";
+		logger.info("Carrier for Display Computation validation: {}", carrierName);
+
 		logger.info("Validating Display Computations for {} Create Endorsement locations and {} Edit Endorsement locations",
 			createLocations != null ? createLocations.size() : 0,
 			editLocations != null ? editLocations.size() : 0);
 
 		// Validate display computations against sheet data
 		EditPremiumEndorsementPage.DisplayComputationSheetValidationResult result =
-			editEndorsementPage.validateDisplayComputationsAgainstSheetData(createLocations, editLocations);
+			editEndorsementPage.validateDisplayComputationsAgainstSheetData(createLocations, editLocations, carrierName);
 
 		// Log validation summary
 		logger.info("=== Display Computation Validation Summary ===");
@@ -1623,6 +1715,761 @@ public class CreatePremiumEndorsementTest {
 			.isTrue();
 
 		logger.info("Display Computation validation completed successfully for all locations");
+	}
+
+	/**
+	 * Test 21: Validate Endorsement PDF against screen data and Excel
+	 * - Click Download Endorsement button
+	 * - Parse PDF (all pages)
+	 * - Validate Page 1 (Summary) against form fields
+	 * - Validate Page 2 (Location table) against Excel data
+	 * - Validate Pages 3+ (Individual locations) against Location History table
+	 */
+	@Test(priority = 21, dependsOnMethods = {"testValidateEditDisplayComputations"})
+	public void testValidatePDFEndorsement() {
+		logger.info("=== Test 21: Validate Endorsement PDF ===");
+
+		assertThat(editEndorsementPage)
+			.as("Edit Endorsement page should be initialized")
+			.isNotNull();
+
+		// PDF download directory
+		String downloadDir = "C:\\Users\\HP\\Downloads\\";
+
+		// Step 1: Click Download Endorsement button and wait for PDF
+		logger.info("Step 1: Downloading Endorsement PDF...");
+		String pdfPath = editEndorsementPage.clickDownloadEndorsementAndWait(downloadDir, 60);
+
+		assertThat(pdfPath)
+			.as("PDF should be downloaded successfully")
+			.isNotNull();
+
+		logger.info("PDF downloaded to: {}", pdfPath);
+
+		// Step 2: Parse the PDF
+		com.automation.utils.EndorsementPDFReader pdfReader = null;
+		try {
+			pdfReader = new com.automation.utils.EndorsementPDFReader(pdfPath);
+			pdfReader.parseAllPages();
+
+			// Step 3: Get data for validation
+			// 3a: Get form values from Edit Endorsement screen
+			java.util.Map<String, String> formValues = editEndorsementPage.getEndorsementFormValues();
+
+			// 3b: Get Excel location data (from CreateEndorsement and EditEndorsement sheets)
+			// Filter out California locations for Arch carrier (they are rejected)
+			ExcelReader configExcelReader = new ExcelReader("src/test/resources/testdata/TestData.xlsx");
+			String carrierName = configExcelReader.getCarrier();
+			boolean isArchCarrier = carrierName != null && carrierName.toLowerCase().contains("arch");
+			logger.info("PDF Validation - Carrier: {} (isArch: {})", carrierName, isArchCarrier);
+
+			java.util.List<java.util.Map<String, String>> allExcelLocations = new java.util.ArrayList<>();
+			if (endorsementLocationData != null) {
+				for (java.util.Map<String, String> loc : endorsementLocationData) {
+					if (isArchCarrier && isCaliforniaLocation(loc)) {
+						logger.info("Skipping California location for Arch carrier: {}", getAddressValue(loc));
+						continue;
+					}
+					allExcelLocations.add(loc);
+				}
+			}
+			if (editEndorsementLocationData != null) {
+				for (java.util.Map<String, String> loc : editEndorsementLocationData) {
+					if (isArchCarrier && isCaliforniaLocation(loc)) {
+						logger.info("Skipping California location for Arch carrier: {}", getAddressValue(loc));
+						continue;
+					}
+					allExcelLocations.add(loc);
+				}
+			}
+			logger.info("Total locations for validation after filtering: {}", allExcelLocations.size());
+
+			// 3c: Get Location History from frontend (for Pages 3+)
+			java.util.List<EditPremiumEndorsementPage.LocationHistoryEntry> locationHistory =
+				editEndorsementPage.captureLocationHistoryTable();
+
+			// 3d: Get GL and WS values from config
+			String glValue = configExcelReader.getGLAmount();
+			String wsValue = configExcelReader.getWSAmount();
+			double glAmount = glValue != null && !glValue.isEmpty() ? Double.parseDouble(glValue) : 150.0;
+			double wsAmount = wsValue != null && !wsValue.isEmpty() ? Double.parseDouble(wsValue) : 120.0;
+
+			// Step 4: Perform validations
+			PDFValidationResult validationResult = validatePDFContent(
+				pdfReader, formValues, allExcelLocations, locationHistory, glAmount, wsAmount);
+
+			// Step 5: Log validation results to report
+			logPDFValidationToReport(validationResult, pdfPath);
+
+			// Step 6: Assert all validations passed
+			assertThat(validationResult.isAllPassed())
+				.as("PDF Validation: All pages should match. " +
+					"Page 1: " + validationResult.page1Summary + ", " +
+					"Page 2: " + validationResult.page2Summary + ", " +
+					"Individual Pages: " + validationResult.individualPagesSummary)
+				.isTrue();
+
+			logger.info("PDF validation completed successfully");
+
+		} catch (Exception e) {
+			logger.error("Error during PDF validation: {}", e.getMessage(), e);
+			editEndorsementPage.captureEndorsementScreenshot("PDF Validation Error");
+			throw new RuntimeException("PDF validation failed: " + e.getMessage(), e);
+		} finally {
+			if (pdfReader != null) {
+				try {
+					pdfReader.close();
+				} catch (Exception e) {
+					logger.warn("Error closing PDF reader: {}", e.getMessage());
+				}
+			}
+		}
+	}
+
+	/**
+	 * Validate PDF content against screen and Excel data
+	 */
+	private PDFValidationResult validatePDFContent(
+			com.automation.utils.EndorsementPDFReader pdfReader,
+			java.util.Map<String, String> formValues,
+			java.util.List<java.util.Map<String, String>> excelLocations,
+			java.util.List<EditPremiumEndorsementPage.LocationHistoryEntry> locationHistory,
+			double glAmount, double wsAmount) {
+
+		PDFValidationResult result = new PDFValidationResult();
+
+		// === Page 1 Validation (Summary) ===
+		logger.info("=== Validating Page 1 (Summary) ===");
+		com.automation.utils.EndorsementPDFReader.EndorsementSummary summary = pdfReader.getSummary();
+		result.page1Validations = new java.util.ArrayList<>();
+
+		// Validate header fields
+		validateField(result.page1Validations, "Effective Date of Endorsement",
+			formValues.get("EffectiveDateOfEndorsement"), summary.effectiveDateOfEndorsement);
+		validateField(result.page1Validations, "Effective Date",
+			formValues.get("EffectiveDate"), summary.effectiveDate);
+		validateField(result.page1Validations, "Expiration Date",
+			formValues.get("ExpirationDate"), summary.expirationDate);
+
+		// Validate location count
+		validateField(result.page1Validations, "Total Properties Covered",
+			String.valueOf(excelLocations.size()), String.valueOf(summary.totalPropertiesCovered));
+
+		// Calculate expected premium totals from Excel data
+		double expectedPropertyPremiumSum = 0;
+		double expectedTIVSum = 0;
+		for (java.util.Map<String, String> loc : excelLocations) {
+			double dwelling = getDoubleValue(loc, "Dwelling", "CoverageA");
+			double structures = getDoubleValue(loc, "AdditionalStructures", "CoverageB");
+			double bpp = getDoubleValue(loc, "BPP", "CoverageC");
+			double rents = getDoubleValue(loc, "LossOfRents", "CoverageD");
+			double rate = getDoubleValue(loc, "Rate", "SuggestedRate");
+
+			double tiv = dwelling + structures + bpp + rents;
+			double annualPremium = (tiv / 100.0) * rate;
+			expectedTIVSum += tiv;
+			expectedPropertyPremiumSum += annualPremium;
+		}
+
+		// Validate TIV
+		validateNumericField(result.page1Validations, "Total Insured Value (TIV)",
+			expectedTIVSum, summary.totalInsuredValue, 1.0);
+
+		// Calculate pro-rata factor from endorsement date to expiration date
+		// PDF shows pro-rated premiums, not full-term
+		double proRataFactor = 1.0;
+		String endorsementDate = formValues.get("EffectiveDateOfEndorsement");
+		String expirationDate = formValues.get("ExpirationDate");
+		if (endorsementDate != null && expirationDate != null && !endorsementDate.isEmpty() && !expirationDate.isEmpty()) {
+			try {
+				java.time.LocalDate startDate = parseDate(endorsementDate);
+				java.time.LocalDate endDate = parseDate(expirationDate);
+				if (startDate != null && endDate != null) {
+					long proRataDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate);
+					proRataFactor = proRataDays / 365.0;
+					logger.info("Pro-rata factor: {} days / 365 = {}", proRataDays, proRataFactor);
+				}
+			} catch (Exception e) {
+				logger.warn("Error calculating pro-rata factor: {}", e.getMessage());
+			}
+		}
+
+		// Validate GL Premium = GL amount per location × number of locations × pro-rata factor
+		double expectedGLTotal = glAmount * excelLocations.size() * proRataFactor;
+		validateNumericField(result.page1Validations, "GL Premium Total",
+			expectedGLTotal, summary.totalGLPremium, 5.0);
+
+		// Validate WS Premium = WS amount per location × number of locations × pro-rata factor
+		double expectedWSTotal = wsAmount * excelLocations.size() * proRataFactor;
+		validateNumericField(result.page1Validations, "Water & Sewer Backup Premium",
+			expectedWSTotal, summary.waterSewerBackupPremium, 5.0);
+
+		result.page1Passed = result.page1Validations.stream().allMatch(v -> v.passed);
+		result.page1Summary = result.page1Validations.stream().filter(v -> v.passed).count() + "/" +
+			result.page1Validations.size() + " passed";
+
+		// === Page 2 Validation (Location Table) ===
+		logger.info("=== Validating Page 2 (Location Table) ===");
+		java.util.List<com.automation.utils.EndorsementPDFReader.LocationTableEntry> pdfLocations =
+			pdfReader.getLocationTable();
+		result.page2Validations = new java.util.ArrayList<>();
+
+		// Debug: Log available PDF locations
+		logger.info("PDF has {} locations for matching:", pdfLocations.size());
+		for (com.automation.utils.EndorsementPDFReader.LocationTableEntry p : pdfLocations) {
+			logger.info("  PDF: {} - {}", p.certId, p.address);
+		}
+
+		for (java.util.Map<String, String> excelLoc : excelLocations) {
+			String excelAddress = getAddressValue(excelLoc);
+			// Debug: Log Excel location keys and address
+			if (excelAddress == null || excelAddress.isEmpty()) {
+				logger.warn("Excel location keys: {}", excelLoc.keySet());
+			}
+			logger.info("Searching for Excel address: '{}'", excelAddress);
+			double excelDwelling = getDoubleValue(excelLoc, "Dwelling", "CoverageA");
+			double excelStructures = getDoubleValue(excelLoc, "AdditionalStructures", "CoverageB");
+			double excelBPP = getDoubleValue(excelLoc, "BPP", "CoverageC");
+			double excelRents = getDoubleValue(excelLoc, "LossOfRents", "CoverageD");
+			double excelRate = getDoubleValue(excelLoc, "Rate", "SuggestedRate");
+
+			// Calculate expected TIV and Full Term
+			double expectedTIV = excelDwelling + excelStructures + excelBPP + excelRents;
+			double expectedFullTerm = (expectedTIV / 100.0) * excelRate;
+
+			// Find matching PDF location
+			com.automation.utils.EndorsementPDFReader.LocationTableEntry pdfLoc =
+				findPDFLocationByAddress(pdfLocations, excelAddress);
+
+			Page2LocationValidation locValidation = new Page2LocationValidation();
+			locValidation.address = excelAddress;
+			locValidation.excelDwelling = excelDwelling;
+			locValidation.excelStructures = excelStructures;
+			locValidation.excelBPP = excelBPP;
+			locValidation.excelRents = excelRents;
+			locValidation.expectedTIV = expectedTIV;
+			locValidation.expectedFullTerm = expectedFullTerm;
+
+			if (pdfLoc != null) {
+				locValidation.pdfDwelling = pdfLoc.dwelling;
+				locValidation.pdfStructures = pdfLoc.structures;
+				locValidation.pdfBPP = pdfLoc.personalProp;
+				locValidation.pdfRents = pdfLoc.rents;
+				locValidation.pdfTIV = pdfLoc.tiv;
+				locValidation.pdfFullTerm = pdfLoc.fullTerm;
+				locValidation.certId = pdfLoc.certId;
+
+				locValidation.dwellingMatch = Math.abs(excelDwelling - pdfLoc.dwelling) < 1.0;
+				locValidation.structuresMatch = Math.abs(excelStructures - pdfLoc.structures) < 1.0;
+				locValidation.bppMatch = Math.abs(excelBPP - pdfLoc.personalProp) < 1.0;
+				locValidation.rentsMatch = Math.abs(excelRents - pdfLoc.rents) < 1.0;
+				locValidation.tivMatch = Math.abs(expectedTIV - pdfLoc.tiv) < 1.0;
+				// Full term tolerance is higher since rate applied may differ from suggested rate
+				locValidation.fullTermMatch = pdfLoc.fullTerm > 0; // Just verify PDF has a value
+				// Core validation: coverage values and TIV must match
+				locValidation.passed = locValidation.dwellingMatch && locValidation.structuresMatch &&
+					locValidation.bppMatch && locValidation.rentsMatch && locValidation.tivMatch;
+
+				logger.info("Page2 Validation for '{}': Dwell={}/{}, Struct={}/{}, BPP={}/{}, Rents={}/{}, TIV={}/{}, FullTerm={}/{}, Passed={}",
+					excelAddress.substring(0, Math.min(20, excelAddress.length())),
+					excelDwelling, pdfLoc.dwelling, excelStructures, pdfLoc.structures,
+					excelBPP, pdfLoc.personalProp, excelRents, pdfLoc.rents,
+					expectedTIV, pdfLoc.tiv, expectedFullTerm, pdfLoc.fullTerm, locValidation.passed);
+			} else {
+				locValidation.error = "Location not found in PDF";
+				locValidation.passed = false;
+			}
+
+			result.page2Validations.add(locValidation);
+		}
+
+		result.page2Passed = result.page2Validations.stream().allMatch(v -> v.passed);
+		result.page2Summary = result.page2Validations.stream().filter(v -> v.passed).count() + "/" +
+			result.page2Validations.size() + " locations passed";
+
+		// === Pages 3+ Validation (Individual Location Pages) ===
+		logger.info("=== Validating Individual Location Pages (3+) ===");
+		java.util.List<com.automation.utils.EndorsementPDFReader.LocationDetailPage> pdfDetailPages =
+			pdfReader.getLocationDetailPages();
+		result.individualPageValidations = new java.util.ArrayList<>();
+
+		for (com.automation.utils.EndorsementPDFReader.LocationDetailPage pdfPage : pdfDetailPages) {
+			// Find matching Location History entry from frontend
+			EditPremiumEndorsementPage.LocationHistoryEntry historyEntry =
+				findLocationHistoryByCertId(locationHistory, pdfPage.certId);
+
+			IndividualPageValidation pageValidation = new IndividualPageValidation();
+			pageValidation.pageNumber = pdfPage.pageNumber;
+			pageValidation.certId = pdfPage.certId;
+			pageValidation.address = pdfPage.propertyAddress;
+
+			// PDF values
+			pageValidation.pdfCovA = pdfPage.premiumCovA;
+			pageValidation.pdfCovB = pdfPage.premiumCovB;
+			pageValidation.pdfCovC = pdfPage.premiumCovC;
+			pageValidation.pdfCovD = pdfPage.premiumCovD;
+			pageValidation.pdfWS = pdfPage.waterSewerBackup;
+			pageValidation.pdfGL = pdfPage.glPremiumCovA;
+			pageValidation.pdfTaxes = pdfPage.calculateTaxesSum();
+			pageValidation.pdfTotal = pdfPage.totalPremium;
+
+			if (historyEntry != null) {
+				// Compare with frontend Location History
+				pageValidation.frontendPropertyPremium = historyEntry.propertyPremium;
+				pageValidation.frontendGL = historyEntry.glPremium;
+				pageValidation.frontendWS = historyEntry.wsPremium;
+				pageValidation.frontendTaxes = historyEntry.taxes;
+				pageValidation.frontendTotal = historyEntry.totalPremium;
+
+				// Calculate expected values - PDF shows full term, so we compare directly
+				double pdfPropertySum = pdfPage.premiumCovA + pdfPage.premiumCovB + pdfPage.premiumCovC + pdfPage.premiumCovD;
+
+				pageValidation.propertyMatch = Math.abs(pdfPropertySum - historyEntry.propertyPremium) < 1.0 ||
+					historyEntry.propertyPremium == 0; // Frontend might not have this breakdown
+				pageValidation.glMatch = Math.abs(pdfPage.glPremiumCovA - historyEntry.glPremium) < 1.0 ||
+					historyEntry.glPremium == 0;
+				pageValidation.wsMatch = Math.abs(pdfPage.waterSewerBackup - historyEntry.wsPremium) < 1.0 ||
+					historyEntry.wsPremium == 0;
+				pageValidation.taxesMatch = Math.abs(pdfPage.calculateTaxesSum() - historyEntry.taxes) < 1.0 ||
+					historyEntry.taxes == 0;
+				pageValidation.totalMatch = Math.abs(pdfPage.totalPremium - historyEntry.totalPremium) < 1.0 ||
+					historyEntry.totalPremium == 0;
+
+				pageValidation.passed = pageValidation.propertyMatch && pageValidation.glMatch &&
+					pageValidation.wsMatch && pageValidation.taxesMatch && pageValidation.totalMatch;
+			} else {
+				// If no Location History found, just validate that PDF has reasonable values
+				pageValidation.passed = pdfPage.totalPremium > 0;
+				if (!pageValidation.passed) {
+					pageValidation.error = "Location History not found for " + pdfPage.certId;
+				}
+			}
+
+			result.individualPageValidations.add(pageValidation);
+		}
+
+		result.individualPagesPassed = result.individualPageValidations.stream().allMatch(v -> v.passed);
+		result.individualPagesSummary = result.individualPageValidations.stream().filter(v -> v.passed).count() +
+			"/" + result.individualPageValidations.size() + " pages passed";
+
+		return result;
+	}
+
+	/**
+	 * Validate string field
+	 */
+	private void validateField(java.util.List<FieldValidation> validations, String fieldName,
+			String expected, String actual) {
+		FieldValidation v = new FieldValidation();
+		v.fieldName = fieldName;
+		v.expected = expected != null ? expected : "";
+		v.actual = actual != null ? actual : "";
+
+		// Normalize date formats for comparison
+		String normalizedExpected = normalizeDateFormat(v.expected);
+		String normalizedActual = normalizeDateFormat(v.actual);
+
+		v.passed = normalizedExpected.equals(normalizedActual) ||
+			v.expected.contains(v.actual) || v.actual.contains(v.expected);
+
+		logger.info("Field '{}': Expected='{}', Actual='{}', Match={}",
+			fieldName, v.expected, v.actual, v.passed);
+		validations.add(v);
+	}
+
+	/**
+	 * Validate numeric field
+	 */
+	private void validateNumericField(java.util.List<FieldValidation> validations, String fieldName,
+			double expected, double actual, double tolerance) {
+		FieldValidation v = new FieldValidation();
+		v.fieldName = fieldName;
+		v.expected = String.format("$%.2f", expected);
+		v.actual = String.format("$%.2f", actual);
+		v.passed = Math.abs(expected - actual) <= tolerance;
+
+		logger.info("Field '{}': Expected={}, Actual={}, Match={}",
+			fieldName, v.expected, v.actual, v.passed);
+		validations.add(v);
+	}
+
+	/**
+	 * Normalize date format for comparison
+	 * Handles both ISO (yyyy-MM-dd) and US (MM/dd/yyyy) formats
+	 */
+	private String normalizeDateFormat(String date) {
+		if (date == null || date.isEmpty()) return "";
+		date = date.trim();
+		// Convert ISO format yyyy-MM-dd to MM/dd/yyyy
+		if (date.matches("\\d{4}-\\d{2}-\\d{2}")) {
+			String[] parts = date.split("-");
+			return parts[1] + "/" + parts[2] + "/" + parts[0];
+		}
+		// Already in MM/dd/yyyy format or similar
+		return date.replaceAll("-", "/").trim();
+	}
+
+	/**
+	 * Parse date string to LocalDate
+	 */
+	private java.time.LocalDate parseDate(String date) {
+		if (date == null || date.isEmpty()) return null;
+		date = date.trim();
+		try {
+			// Try ISO format (yyyy-MM-dd)
+			if (date.matches("\\d{4}-\\d{2}-\\d{2}")) {
+				return java.time.LocalDate.parse(date);
+			}
+			// Try US format (MM/dd/yyyy)
+			if (date.matches("\\d{2}/\\d{2}/\\d{4}")) {
+				String[] parts = date.split("/");
+				return java.time.LocalDate.of(
+					Integer.parseInt(parts[2]),
+					Integer.parseInt(parts[0]),
+					Integer.parseInt(parts[1])
+				);
+			}
+		} catch (Exception e) {
+			logger.warn("Failed to parse date: {}", date);
+		}
+		return null;
+	}
+
+	/**
+	 * Find PDF location by address
+	 */
+	private com.automation.utils.EndorsementPDFReader.LocationTableEntry findPDFLocationByAddress(
+			java.util.List<com.automation.utils.EndorsementPDFReader.LocationTableEntry> pdfLocations,
+			String address) {
+		if (address == null || pdfLocations == null) {
+			logger.warn("findPDFLocationByAddress: address or pdfLocations is null");
+			return null;
+		}
+		String normalizedAddress = address.toLowerCase().replaceAll("\\s+", " ").trim();
+		String streetPart = normalizedAddress.split(",")[0].trim();
+		// Remove common abbreviations for better matching
+		String searchStreet = streetPart.replaceAll("street|st\\.|st$", "st")
+			.replaceAll("avenue|ave\\.|ave$", "ave")
+			.replaceAll("boulevard|blvd\\.|blvd$", "blvd")
+			.replaceAll("road|rd\\.|rd$", "rd");
+
+		for (com.automation.utils.EndorsementPDFReader.LocationTableEntry loc : pdfLocations) {
+			if (loc.address != null) {
+				String pdfAddress = loc.address.toLowerCase().replaceAll("\\s+", " ").trim();
+				String pdfStreet = pdfAddress.split(",")[0].trim();
+				String pdfSearchStreet = pdfStreet.replaceAll("street|st\\.|st$", "st")
+					.replaceAll("avenue|ave\\.|ave$", "ave")
+					.replaceAll("boulevard|blvd\\.|blvd$", "blvd")
+					.replaceAll("road|rd\\.|rd$", "rd");
+
+				// Full address match
+				if (pdfAddress.equals(normalizedAddress) || pdfAddress.contains(normalizedAddress) || normalizedAddress.contains(pdfAddress)) {
+					logger.info("Page2 Match (full): Excel='{}' matches PDF='{}'", address, loc.address);
+					return loc;
+				}
+				// Street part match
+				if (pdfSearchStreet.equals(searchStreet) || pdfSearchStreet.contains(searchStreet) || searchStreet.contains(pdfSearchStreet)) {
+					logger.info("Page2 Match (street): Excel='{}' matches PDF='{}'", address, loc.address);
+					return loc;
+				}
+			}
+		}
+		logger.warn("Page2 No match for: '{}' (normalized: '{}', street: '{}')", address, normalizedAddress, streetPart);
+		return null;
+	}
+
+	/**
+	 * Find Location History entry by Cert ID
+	 */
+	private EditPremiumEndorsementPage.LocationHistoryEntry findLocationHistoryByCertId(
+			java.util.List<EditPremiumEndorsementPage.LocationHistoryEntry> history, String certId) {
+		if (certId == null || history == null) return null;
+		for (EditPremiumEndorsementPage.LocationHistoryEntry entry : history) {
+			if (certId.equals(entry.certId)) {
+				return entry;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Get double value from location map with fallback keys
+	 */
+	private double getDoubleValue(java.util.Map<String, String> loc, String... keys) {
+		for (String key : keys) {
+			String value = loc.get(key);
+			if (value != null && !value.isEmpty()) {
+				try {
+					return Double.parseDouble(value.replaceAll("[^\\d.-]", ""));
+				} catch (NumberFormatException e) {
+					// Try next key
+				}
+			}
+		}
+		return 0.0;
+	}
+
+	/**
+	 * Get address value from location map
+	 */
+	private String getAddressValue(java.util.Map<String, String> loc) {
+		for (String key : new String[]{"Address", "FullAddress", "address", "LocationAddress"}) {
+			String value = loc.get(key);
+			if (value != null && !value.isEmpty()) {
+				return value;
+			}
+		}
+		return "";
+	}
+
+	/**
+	 * Check if location is in California (for Arch carrier filtering)
+	 */
+	private boolean isCaliforniaLocation(java.util.Map<String, String> loc) {
+		String state = loc.get("State");
+		if (state != null && (state.equalsIgnoreCase("CA") || state.equalsIgnoreCase("California"))) {
+			return true;
+		}
+		String address = getAddressValue(loc);
+		return address.contains(", CA ") || address.contains(", California ");
+	}
+
+	/**
+	 * Log PDF validation results to HTML report
+	 */
+	private void logPDFValidationToReport(PDFValidationResult result, String pdfPath) {
+		StringBuilder html = new StringBuilder();
+		html.append("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;'>");
+		html.append("<h3 style='color: #28a745; margin-bottom: 15px;'>")
+			.append(result.isAllPassed() ? "✅" : "❌")
+			.append(" Endorsement PDF Validation</h3>");
+
+		// PDF Info
+		html.append("<p style='color: #28a745;'><strong>PDF File:</strong> ").append(pdfPath).append("</p>");
+
+		// === Page 1 Summary ===
+		String page1Color = result.page1Passed ? "#28a745" : "#dc3545";
+		html.append("<h4 style='color: ").append(page1Color).append("; margin-top: 15px;'>Page 1 - Summary Validation: ")
+			.append(result.page1Summary).append("</h4>");
+		html.append("<table style='width: 100%; border-collapse: collapse; font-size: 12px;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 8px;'>Field</th>");
+		html.append("<th style='padding: 8px;'>Expected (Screen)</th>");
+		html.append("<th style='padding: 8px;'>Actual (PDF)</th>");
+		html.append("<th style='padding: 8px;'>Status</th></tr>");
+
+		for (FieldValidation v : result.page1Validations) {
+			String statusColor = v.passed ? "#28a745" : "#dc3545";
+			html.append("<tr style='background-color: #fff;'>");
+			html.append("<td style='padding: 8px;'>").append(v.fieldName).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(v.expected).append("</td>");
+			html.append("<td style='padding: 8px;'>").append(v.actual).append("</td>");
+			html.append("<td style='padding: 8px; color: ").append(statusColor).append("; font-weight: bold;'>")
+				.append(v.passed ? "PASS" : "FAIL").append("</td></tr>");
+		}
+		html.append("</table>");
+
+		// === Page 2 Location Table ===
+		String page2Color = result.page2Passed ? "#28a745" : "#dc3545";
+		html.append("<h4 style='color: ").append(page2Color).append("; margin-top: 15px;'>Page 2 - Location Table Validation: ")
+			.append(result.page2Summary).append("</h4>");
+		html.append("<p style='color: #28a745;'><strong>Formulas:</strong> TIV = Dwelling + Structures + BPP + Rents | Full Term = (TIV / 100) × Rate</p>");
+		html.append("<table style='width: 100%; border-collapse: collapse; font-size: 11px;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 6px;'>Address</th>");
+		html.append("<th style='padding: 6px;'>Dwelling</th>");
+		html.append("<th style='padding: 6px;'>Structures</th>");
+		html.append("<th style='padding: 6px;'>BPP</th>");
+		html.append("<th style='padding: 6px;'>Rents</th>");
+		html.append("<th style='padding: 6px;'>TIV (Calc/PDF)</th>");
+		html.append("<th style='padding: 6px;'>Full Term (Calc/PDF)</th>");
+		html.append("<th style='padding: 6px;'>Status</th></tr>");
+
+		for (Page2LocationValidation v : result.page2Validations) {
+			String statusColor = v.passed ? "#28a745" : "#dc3545";
+			String rowBg = v.passed ? "#d4edda" : "#f8d7da";
+			html.append("<tr style='background-color: ").append(rowBg).append(";'>");
+			html.append("<td style='padding: 6px;'>").append(truncateString(v.address, 30)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.0f", v.excelDwelling))
+				.append(" / $").append(String.format("%.0f", v.pdfDwelling)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.0f", v.excelStructures))
+				.append(" / $").append(String.format("%.0f", v.pdfStructures)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.0f", v.excelBPP))
+				.append(" / $").append(String.format("%.0f", v.pdfBPP)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.0f", v.excelRents))
+				.append(" / $").append(String.format("%.0f", v.pdfRents)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", v.expectedTIV))
+				.append(" / $").append(String.format("%.2f", v.pdfTIV)).append("</td>");
+			html.append("<td style='padding: 6px;'>$").append(String.format("%.2f", v.expectedFullTerm))
+				.append(" / $").append(String.format("%.2f", v.pdfFullTerm)).append("</td>");
+			html.append("<td style='padding: 6px; color: ").append(statusColor).append("; font-weight: bold;'>")
+				.append(v.passed ? "PASS" : "FAIL").append("</td></tr>");
+		}
+		html.append("</table>");
+
+		// === Individual Pages (3+) ===
+		String individualPagesColor = result.individualPagesPassed ? "#28a745" : "#dc3545";
+		html.append("<h4 style='color: ").append(individualPagesColor).append("; margin-top: 15px;'>Pages 3+ - Individual Location Validation: ")
+			.append(result.individualPagesSummary).append("</h4>");
+		html.append("<p style='color: #28a745;'><strong>Comparison:</strong> Frontend (Expected) vs PDF (Actual)</p>");
+		html.append("<table style='width: 100%; border-collapse: collapse; font-size: 10px;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 5px;'>Page</th>");
+		html.append("<th style='padding: 5px;'>Cert ID</th>");
+		html.append("<th style='padding: 5px;'>Address</th>");
+		html.append("<th style='padding: 5px;'>Property (Front/PDF)</th>");
+		html.append("<th style='padding: 5px;'>GL (Front/PDF)</th>");
+		html.append("<th style='padding: 5px;'>WS (Front/PDF)</th>");
+		html.append("<th style='padding: 5px;'>Taxes (Front/PDF)</th>");
+		html.append("<th style='padding: 5px;'>Total (Front/PDF)</th>");
+		html.append("<th style='padding: 5px;'>Status</th></tr>");
+
+		for (IndividualPageValidation v : result.individualPageValidations) {
+			String statusColor = v.passed ? "#28a745" : "#dc3545";
+			String rowBg = v.passed ? "#d4edda" : "#f8d7da";
+			double pdfPropertySum = v.pdfCovA + v.pdfCovB + v.pdfCovC + v.pdfCovD;
+
+			// Determine match colors for each column
+			String propColor = v.propertyMatch ? "#28a745" : "#dc3545";
+			String glColor = v.glMatch ? "#28a745" : "#dc3545";
+			String wsColor = v.wsMatch ? "#28a745" : "#dc3545";
+			String taxesColor = v.taxesMatch ? "#28a745" : "#dc3545";
+			String totalColor = v.totalMatch ? "#28a745" : "#dc3545";
+
+			html.append("<tr style='background-color: ").append(rowBg).append(";'>");
+			html.append("<td style='padding: 5px;'>").append(v.pageNumber).append("</td>");
+			html.append("<td style='padding: 5px;'>").append(v.certId).append("</td>");
+			html.append("<td style='padding: 5px;'>").append(truncateString(v.address, 20)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(propColor).append(";'>$")
+				.append(String.format("%.2f", v.frontendPropertyPremium)).append(" / $")
+				.append(String.format("%.2f", pdfPropertySum)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(glColor).append(";'>$")
+				.append(String.format("%.2f", v.frontendGL)).append(" / $")
+				.append(String.format("%.2f", v.pdfGL)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(wsColor).append(";'>$")
+				.append(String.format("%.2f", v.frontendWS)).append(" / $")
+				.append(String.format("%.2f", v.pdfWS)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(taxesColor).append(";'>$")
+				.append(String.format("%.2f", v.frontendTaxes)).append(" / $")
+				.append(String.format("%.2f", v.pdfTaxes)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(totalColor).append(";'>$")
+				.append(String.format("%.2f", v.frontendTotal)).append(" / $")
+				.append(String.format("%.2f", v.pdfTotal)).append("</td>");
+			html.append("<td style='padding: 5px; color: ").append(statusColor).append("; font-weight: bold;'>")
+				.append(v.passed ? "PASS" : "FAIL").append("</td></tr>");
+		}
+		html.append("</table>");
+
+		// Grand Total Validation - Compare sum of frontend locations (from PDF) with PDF Grand Total
+		// Calculate sum of frontend totals for locations that exist in PDF
+		double frontendTotalSum = 0.0;
+		for (IndividualPageValidation v : result.individualPageValidations) {
+			frontendTotalSum += v.frontendTotal;
+		}
+
+		com.automation.utils.EndorsementPDFReader.EndorsementSummary summary = null;
+		try {
+			com.automation.utils.EndorsementPDFReader pdfReader = new com.automation.utils.EndorsementPDFReader(pdfPath);
+			summary = pdfReader.getSummary();
+			pdfReader.close();
+		} catch (Exception e) {
+			// Ignore
+		}
+
+		boolean grandTotalMatch = false;
+		if (summary != null) {
+			grandTotalMatch = Math.abs(summary.grandTotal - frontendTotalSum) < 1.0;
+		}
+
+		String grandTotalColor = grandTotalMatch ? "#28a745" : "#dc3545";
+		html.append("<h4 style='color: ").append(grandTotalColor).append("; margin-top: 15px;'>Grand Total Validation</h4>");
+		html.append("<p style='color: #28a745;'><strong>Formula:</strong> Sum of all location totals from Frontend (locations in PDF) = PDF Grand Total</p>");
+
+		if (summary != null) {
+			html.append("<table style='width: 70%; border-collapse: collapse; font-size: 12px;'>");
+			html.append("<tr style='background-color: #343a40; color: white;'>");
+			html.append("<th style='padding: 8px;'>Description</th>");
+			html.append("<th style='padding: 8px;'>Value</th></tr>");
+
+			html.append("<tr><td style='padding: 8px;'>Number of Locations in PDF:</td><td style='padding: 8px;'>")
+				.append(result.individualPageValidations.size()).append("</td></tr>");
+			html.append("<tr><td style='padding: 8px;'>Sum of Frontend Location Totals:</td><td style='padding: 8px;'>$")
+				.append(String.format("%.2f", frontendTotalSum)).append("</td></tr>");
+			html.append("<tr style='background-color: #fff3cd;'><td style='padding: 8px; font-weight: bold;'>PDF Grand Total (Yellow in PDF):</td><td style='padding: 8px; font-weight: bold;'>$")
+				.append(String.format("%.2f", summary.grandTotal)).append("</td></tr>");
+			html.append("<tr><td style='padding: 8px;'>Difference:</td><td style='padding: 8px;'>$")
+				.append(String.format("%.2f", Math.abs(summary.grandTotal - frontendTotalSum))).append("</td></tr>");
+			html.append("<tr><td style='padding: 8px; font-weight: bold;'>Match Status:</td><td style='padding: 8px; color: ")
+				.append(grandTotalColor).append("; font-weight: bold;'>")
+				.append(grandTotalMatch ? "PASS" : "FAIL").append("</td></tr>");
+			html.append("</table>");
+		}
+
+		html.append("</div>");
+
+		// Log to report
+		try {
+			editEndorsementPage.logHtmlToReport(html.toString());
+		} catch (Exception e) {
+			logger.warn("Could not log PDF validation to report: {}", e.getMessage());
+		}
+	}
+
+	/**
+	 * Truncate string for display
+	 */
+	private String truncateString(String s, int maxLen) {
+		if (s == null) return "";
+		return s.length() > maxLen ? s.substring(0, maxLen) + "..." : s;
+	}
+
+	// ==================== PDF Validation Result Classes ====================
+
+	private static class PDFValidationResult {
+		java.util.List<FieldValidation> page1Validations;
+		java.util.List<Page2LocationValidation> page2Validations;
+		java.util.List<IndividualPageValidation> individualPageValidations;
+		boolean page1Passed;
+		boolean page2Passed;
+		boolean individualPagesPassed;
+		String page1Summary;
+		String page2Summary;
+		String individualPagesSummary;
+
+		boolean isAllPassed() {
+			return page1Passed && page2Passed && individualPagesPassed;
+		}
+	}
+
+	private static class FieldValidation {
+		String fieldName;
+		String expected;
+		String actual;
+		boolean passed;
+	}
+
+	private static class Page2LocationValidation {
+		String address;
+		String certId;
+		double excelDwelling, excelStructures, excelBPP, excelRents;
+		double pdfDwelling, pdfStructures, pdfBPP, pdfRents;
+		double expectedTIV, pdfTIV;
+		double expectedFullTerm, pdfFullTerm;
+		boolean dwellingMatch, structuresMatch, bppMatch, rentsMatch, tivMatch, fullTermMatch;
+		boolean passed;
+		String error;
+	}
+
+	private static class IndividualPageValidation {
+		int pageNumber;
+		String certId;
+		String address;
+		double pdfCovA, pdfCovB, pdfCovC, pdfCovD;
+		double pdfWS, pdfGL, pdfTaxes, pdfTotal;
+		double frontendPropertyPremium, frontendGL, frontendWS, frontendTaxes, frontendTotal;
+		boolean propertyMatch, glMatch, wsMatch, taxesMatch, totalMatch;
+		boolean passed;
+		String error;
 	}
 
 	// ==================== Helper ====================

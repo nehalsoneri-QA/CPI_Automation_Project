@@ -2508,6 +2508,543 @@ public class MasterPolicyPage extends CreateQuotePage {
 		return addresses;
 	}
 
+	// ==================== Flat Cancel Validation Methods ====================
+
+	/**
+	 * Validate that cancelled certificates are NOT displayed on Master Policy page
+	 * @param cancelledCertificates List of certificate IDs that were flat cancelled
+	 * @return FlatCancelValidationResult with pass/fail for each certificate
+	 */
+	public FlatCancelCertificateValidationResult validateCancelledCertificatesNotDisplayed(List<String> cancelledCertificates) {
+		logger.info("=== Validating {} Cancelled Certificates are NOT on Master Policy ===", cancelledCertificates.size());
+		FlatCancelCertificateValidationResult result = new FlatCancelCertificateValidationResult();
+		result.totalCertificates = cancelledCertificates.size();
+
+		// Wait for page to load
+		sleep(2000);
+
+		// Get all text from locations table
+		String tableText = "";
+		try {
+			// Try to find locations table
+			List<WebElement> tables = driver.findElements(By.xpath("//table"));
+			for (WebElement table : tables) {
+				if (table.isDisplayed()) {
+					tableText += table.getText() + " ";
+				}
+			}
+			logger.info("Locations table text length: {} characters", tableText.length());
+		} catch (Exception e) {
+			logger.warn("Could not read locations table: {}", e.getMessage());
+		}
+
+		// Also get full page text as backup
+		String pageText = "";
+		try {
+			WebElement body = driver.findElement(By.tagName("body"));
+			pageText = body.getText();
+		} catch (Exception e) {
+			logger.warn("Could not read page text: {}", e.getMessage());
+		}
+
+		// Check each cancelled certificate
+		java.util.List<String[]> validationRows = new java.util.ArrayList<>();
+		validationRows.add(new String[]{"=== FLAT CANCELLED CERTIFICATES VALIDATION ===", "", "", "INFO"});
+		validationRows.add(new String[]{"Certificate ID", "Expected Status", "Found on Page?", "Result"});
+
+		for (String certId : cancelledCertificates) {
+			boolean foundInTable = tableText.contains(certId);
+			boolean foundOnPage = pageText.contains(certId);
+
+			// Certificate should NOT be found - so NOT found = PASS
+			boolean pass = !foundInTable && !foundOnPage;
+
+			if (pass) {
+				result.certificatesNotFound.add(certId);
+				validationRows.add(new String[]{certId, "NOT Displayed", "No", "PASS"});
+				logger.info("Certificate {} correctly NOT found on Master Policy page", certId);
+			} else {
+				result.certificatesStillDisplayed.add(certId);
+				validationRows.add(new String[]{certId, "NOT Displayed", foundInTable ? "Yes (in table)" : "Yes (on page)", "FAIL"});
+				logger.error("Certificate {} is STILL displayed on Master Policy page after flat cancel!", certId);
+			}
+		}
+
+		result.allCertificatesRemoved = result.certificatesStillDisplayed.isEmpty();
+
+		// Build HTML report
+		StringBuilder html = new StringBuilder();
+		String statusColor = result.allCertificatesRemoved ? "#28a745" : "#dc3545";
+		String status = result.allCertificatesRemoved ? "PASSED" : "FAILED";
+
+		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid ").append(statusColor).append("; color: #000000;'>");
+		html.append("<h3 style='color: ").append(statusColor).append("; margin-top: 0;'>Flat Cancelled Certificates Validation - ").append(status).append("</h3>");
+		html.append("<p style='color: #000000;'>Verifying that <strong>").append(cancelledCertificates.size()).append("</strong> flat cancelled certificates are NOT displayed on Master Policy page</p>");
+
+		html.append("<table style='width: 100%; border-collapse: collapse; margin: 10px 0; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 10px; text-align: left;'>Certificate ID</th>");
+		html.append("<th style='padding: 10px; text-align: center;'>Expected</th>");
+		html.append("<th style='padding: 10px; text-align: center;'>Found on Page?</th>");
+		html.append("<th style='padding: 10px; text-align: center;'>Result</th>");
+		html.append("</tr>");
+
+		for (int i = 1; i < validationRows.size(); i++) {
+			String[] row = validationRows.get(i);
+			String bgColor = row[3].equals("PASS") ? "#e8f5e9" : "#ffebee";
+
+			html.append("<tr style='background-color: ").append(bgColor).append("; border-bottom: 1px solid #dee2e6; color: #000000;'>");
+			html.append("<td style='padding: 8px; font-weight: bold; color: #000000;'>").append(row[0]).append("</td>");
+			html.append("<td style='padding: 8px; text-align: center; color: #000000;'>").append(row[1]).append("</td>");
+			html.append("<td style='padding: 8px; text-align: center; color: #000000;'>").append(row[2]).append("</td>");
+			html.append("<td style='padding: 8px; text-align: center;'>").append(getStatusBadge(row[3])).append("</td>");
+			html.append("</tr>");
+		}
+
+		html.append("</table>");
+
+		// Summary
+		html.append("<p style='margin-top: 10px; color: #000000;'><strong>Summary:</strong> ");
+		html.append(result.certificatesNotFound.size()).append(" of ").append(cancelledCertificates.size());
+		html.append(" certificates correctly removed from Master Policy</p>");
+
+		if (!result.certificatesStillDisplayed.isEmpty()) {
+			html.append("<p style='color: #dc3545;'><strong>ERROR:</strong> The following certificates are still displayed: ");
+			html.append(result.certificatesStillDisplayed).append("</p>");
+		}
+
+		html.append("</div>");
+
+		result.htmlReport = html.toString();
+		logHtmlToReport(html.toString());
+
+		captureScreenshotToReport("Flat Cancel Certificates Validation");
+
+		logger.info("Flat Cancel validation complete: {} passed, {} failed",
+			result.certificatesNotFound.size(), result.certificatesStillDisplayed.size());
+
+		return result;
+	}
+
+	/**
+	 * Find ADDRESS_FLAT_CANCELLED entry in Bind History table
+	 * @return Row index of the last ADDRESS_FLAT_CANCELLED entry, or -1 if not found
+	 */
+	public int findAddressFlatCancelledEntry() {
+		logger.info("=== Finding ADDRESS_FLAT_CANCELLED Entry in Bind History ===");
+
+		try {
+			// Find all rows in Bind History table
+			List<WebElement> rows = driver.findElements(By.xpath(
+				"//*[contains(@id, 'content-Bind History')]//table//tbody//tr"));
+
+			if (rows.isEmpty()) {
+				// Try alternative XPath
+				rows = driver.findElements(By.xpath("//table//tbody//tr[contains(.,'ADDRESS_FLAT_CANCELLED')]"));
+			}
+
+			logger.info("Found {} rows in Bind History table", rows.size());
+
+			int lastFlatCancelIndex = -1;
+
+			for (int i = 0; i < rows.size(); i++) {
+				try {
+					String rowText = rows.get(i).getText();
+					if (rowText.contains("ADDRESS_FLAT_CANCELLED")) {
+						lastFlatCancelIndex = i;
+						logger.info("Found ADDRESS_FLAT_CANCELLED at row index {}: {}",
+							i, rowText.substring(0, Math.min(100, rowText.length())));
+					}
+				} catch (Exception e) {
+					// Row might be stale, continue
+				}
+			}
+
+			if (lastFlatCancelIndex >= 0) {
+				logger.info("Last ADDRESS_FLAT_CANCELLED entry found at row index {}", lastFlatCancelIndex);
+			} else {
+				logger.warn("ADDRESS_FLAT_CANCELLED entry not found in Bind History");
+			}
+
+			return lastFlatCancelIndex;
+
+		} catch (Exception e) {
+			logger.error("Error finding ADDRESS_FLAT_CANCELLED entry: {}", e.getMessage());
+			return -1;
+		}
+	}
+
+	/**
+	 * Click Download Document button for ADDRESS_FLAT_CANCELLED entry
+	 * @param rowIndex Row index of the entry (use findAddressFlatCancelledEntry to get this)
+	 * @return true if click successful
+	 */
+	public boolean clickDownloadForFlatCancelEntry(int rowIndex) {
+		logger.info("=== Clicking Download Document for ADDRESS_FLAT_CANCELLED (row {}) ===", rowIndex);
+
+		try {
+			// Find all rows
+			List<WebElement> rows = driver.findElements(By.xpath(
+				"//*[contains(@id, 'content-Bind History')]//table//tbody//tr"));
+
+			if (rows.isEmpty()) {
+				rows = driver.findElements(By.xpath("//table//tbody//tr[contains(.,'ADDRESS_FLAT_CANCELLED')]"));
+			}
+
+			if (rowIndex < 0 || rowIndex >= rows.size()) {
+				logger.error("Row index {} is out of bounds (total rows: {})", rowIndex, rows.size());
+				return false;
+			}
+
+			WebElement row = rows.get(rowIndex);
+
+			// Scroll row into view
+			((JavascriptExecutor) driver).executeScript(
+				"arguments[0].scrollIntoView({block: 'center'});", row);
+			sleep(500);
+
+			captureScreenshotToReport("ADDRESS_FLAT_CANCELLED Row - Before Download Click");
+
+			// Find Download Document button in this row
+			// Try multiple patterns
+			String[] buttonXpaths = {
+				".//button[contains(text(),'Download Document')]",
+				".//button[contains(text(),'Download')]",
+				".//td[last()]//button[1]",
+				".//td//button[1]"
+			};
+
+			WebElement downloadBtn = null;
+			for (String xpath : buttonXpaths) {
+				try {
+					List<WebElement> buttons = row.findElements(By.xpath(xpath));
+					for (WebElement btn : buttons) {
+						if (btn.isDisplayed()) {
+							downloadBtn = btn;
+							logger.info("Found Download button using xpath: {}", xpath);
+							break;
+						}
+					}
+					if (downloadBtn != null) break;
+				} catch (Exception e) {
+					// Try next pattern
+				}
+			}
+
+			if (downloadBtn == null) {
+				logger.error("Download Document button not found in row");
+				captureScreenshotToReport("Download Button - NOT FOUND");
+				return false;
+			}
+
+			// Click using JavaScript
+			((JavascriptExecutor) driver).executeScript("arguments[0].click();", downloadBtn);
+			logger.info("Clicked Download Document button for ADDRESS_FLAT_CANCELLED");
+
+			// Wait for download to start
+			sleep(5000);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error clicking Download button: {}", e.getMessage());
+			captureScreenshotToReport("Download Button - ERROR");
+			return false;
+		}
+	}
+
+	/**
+	 * Download and validate Flat Cancel PDF from Bind History
+	 * Compares PDF Total Balance Refund with calculated grand total from Edit Flat Cancel
+	 * @param calculatedGrandTotal The grand total calculated from Edit Flat Cancel screen
+	 * @param cancelledCertificates List of cancelled certificate IDs
+	 * @param locationDetails Map of certificate ID to location details (for individual validation)
+	 * @return FlatCancelPDFValidationResult with detailed validation
+	 */
+	public FlatCancelPDFValidationResult downloadAndValidateFlatCancelPDF(
+			double calculatedGrandTotal,
+			List<String> cancelledCertificates,
+			Map<String, Double> locationTotals) {
+
+		logger.info("=== Downloading and Validating Flat Cancel PDF ===");
+		logger.info("Expected Grand Total: ${}", String.format("%.2f", calculatedGrandTotal));
+		logger.info("Cancelled Certificates: {}", cancelledCertificates);
+
+		FlatCancelPDFValidationResult result = new FlatCancelPDFValidationResult();
+		result.expectedGrandTotal = calculatedGrandTotal;
+
+		try {
+			// Step 1: Click Bind History tab
+			if (!clickBindHistoryTab()) {
+				result.addError("Failed to click Bind History tab");
+				return result;
+			}
+
+			captureScreenshotToReport("Bind History Tab - Opened");
+
+			// Step 2: Find ADDRESS_FLAT_CANCELLED entry
+			int flatCancelRowIndex = findAddressFlatCancelledEntry();
+			if (flatCancelRowIndex < 0) {
+				result.addError("ADDRESS_FLAT_CANCELLED entry not found in Bind History");
+				return result;
+			}
+
+			// Step 3: Click Download Document button
+			if (!clickDownloadForFlatCancelEntry(flatCancelRowIndex)) {
+				result.addError("Failed to click Download Document button");
+				return result;
+			}
+
+			// Step 4: Wait for PDF download
+			String downloadDir = getDownloadDirectory();
+			sleep(3000);
+			String pdfPath = waitForPDFDownload(downloadDir, 30);
+
+			if (pdfPath == null) {
+				result.addError("PDF download failed or timed out");
+				return result;
+			}
+
+			logger.info("PDF downloaded: {}", pdfPath);
+			result.pdfPath = pdfPath;
+
+			// Step 5: Parse PDF using FlatCancelPDFReader
+			com.automation.utils.FlatCancelPDFReader pdfReader =
+				new com.automation.utils.FlatCancelPDFReader(pdfPath);
+			pdfReader.parseAllPages();
+
+			result.pdfSummary = pdfReader.getSummary();
+			result.pdfLocations = pdfReader.getLocations();
+
+			// Step 6: Validate Total Balance Refund
+			double pdfTotalBalanceRefund = result.pdfSummary.totalBalanceRefund;
+			result.pdfGrandTotal = pdfTotalBalanceRefund;
+			result.difference = Math.abs(pdfTotalBalanceRefund - calculatedGrandTotal);
+			result.grandTotalMatch = result.difference < 1.0; // $1 tolerance
+
+			logger.info("PDF Total Balance Refund: ${}", String.format("%.2f", pdfTotalBalanceRefund));
+			logger.info("Calculated Grand Total: ${}", String.format("%.2f", calculatedGrandTotal));
+			logger.info("Difference: ${}", String.format("%.2f", result.difference));
+			logger.info("Match: {}", result.grandTotalMatch);
+
+			// Step 7: Validate individual locations
+			for (String certId : cancelledCertificates) {
+				boolean foundInPdf = pdfReader.certificateExistsInPDF(certId);
+				result.certificateInPdfMap.put(certId, foundInPdf);
+
+				if (foundInPdf) {
+					result.certificatesFoundInPdf.add(certId);
+				} else {
+					result.certificatesNotInPdf.add(certId);
+				}
+			}
+
+			// Step 8: Validate individual location totals if provided
+			if (locationTotals != null && !locationTotals.isEmpty()) {
+				for (Map.Entry<String, Double> entry : locationTotals.entrySet()) {
+					String certId = entry.getKey();
+					double expectedTotal = entry.getValue();
+					boolean matches = pdfReader.validateLocation(certId, expectedTotal);
+					result.locationTotalMatches.put(certId, matches);
+				}
+			}
+
+			// Step 9: Open PDF in new tab for screenshot
+			String originalWindow = driver.getWindowHandle();
+			openPDFInNewTab(pdfPath);
+			sleep(2000);
+			captureScreenshotToReport("Flat Cancel PDF - Page 1 (Summary)");
+
+			// Close PDF tab
+			closePDFTab(originalWindow);
+
+			// Step 10: Close PDF reader
+			pdfReader.close();
+
+			// Step 11: Build HTML validation report
+			result.htmlReport = buildFlatCancelPDFValidationReport(result, cancelledCertificates, locationTotals);
+			logHtmlToReport(result.htmlReport);
+
+			logger.info("Flat Cancel PDF validation complete. Grand Total Match: {}", result.grandTotalMatch);
+
+		} catch (Exception e) {
+			logger.error("Error validating Flat Cancel PDF: {}", e.getMessage());
+			result.addError("Exception: " + e.getMessage());
+		}
+
+		return result;
+	}
+
+	/**
+	 * Build HTML validation report for Flat Cancel PDF
+	 */
+	private String buildFlatCancelPDFValidationReport(
+			FlatCancelPDFValidationResult result,
+			List<String> cancelledCertificates,
+			Map<String, Double> locationTotals) {
+
+		StringBuilder html = new StringBuilder();
+
+		String status = result.grandTotalMatch ? "PASSED" : "FAILED";
+		String statusColor = result.grandTotalMatch ? "#28a745" : "#dc3545";
+
+		html.append("<div style='margin: 10px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid ").append(statusColor).append("; color: #000000;'>");
+		html.append("<h3 style='color: ").append(statusColor).append("; margin-top: 0;'>Flat Cancel PDF Validation - ").append(status).append("</h3>");
+
+		// Summary section
+		html.append("<h4 style='color: #1565c0;'>PDF Summary</h4>");
+		if (result.pdfSummary != null) {
+			html.append("<table style='width: 100%; border-collapse: collapse; margin: 10px 0; color: #000000;'>");
+			html.append("<tr style='background-color: #e3f2fd;'><td style='padding: 8px; width: 40%;'>Policy ID</td><td style='padding: 8px;'>").append(result.pdfSummary.policyId).append("</td></tr>");
+			html.append("<tr><td style='padding: 8px;'>Endorsement Type</td><td style='padding: 8px;'>").append(result.pdfSummary.endorsementType).append("</td></tr>");
+			html.append("<tr style='background-color: #e3f2fd;'><td style='padding: 8px;'>Effective Date</td><td style='padding: 8px;'>").append(result.pdfSummary.effectiveDateOfEndorsement).append("</td></tr>");
+			html.append("<tr><td style='padding: 8px;'>Total Properties Cancelled</td><td style='padding: 8px;'>").append(result.pdfSummary.totalPropertiesCancelled).append("</td></tr>");
+			html.append("</table>");
+		}
+
+		// Grand Total Comparison
+		html.append("<h4 style='color: #1565c0;'>Total Balance Refund Validation</h4>");
+		html.append("<table style='width: 100%; border-collapse: collapse; margin: 10px 0; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 10px;'>Field</th>");
+		html.append("<th style='padding: 10px;'>Edit Flat Cancel (Calculated)</th>");
+		html.append("<th style='padding: 10px;'>PDF Value</th>");
+		html.append("<th style='padding: 10px;'>Difference</th>");
+		html.append("<th style='padding: 10px;'>Result</th>");
+		html.append("</tr>");
+
+		String totalBgColor = result.grandTotalMatch ? "#e8f5e9" : "#ffebee";
+		html.append("<tr style='background-color: ").append(totalBgColor).append("; color: #000000;'>");
+		html.append("<td style='padding: 10px; font-weight: bold;'>Total Balance Refund</td>");
+		html.append("<td style='padding: 10px; text-align: center;'>$").append(String.format("%.2f", result.expectedGrandTotal)).append("</td>");
+		html.append("<td style='padding: 10px; text-align: center;'>$").append(String.format("%.2f", result.pdfGrandTotal)).append("</td>");
+		html.append("<td style='padding: 10px; text-align: center;'>$").append(String.format("%.2f", result.difference)).append("</td>");
+		html.append("<td style='padding: 10px; text-align: center;'>").append(getStatusBadge(result.grandTotalMatch ? "PASS" : "FAIL")).append("</td>");
+		html.append("</tr></table>");
+
+		// Certificate Validation
+		html.append("<h4 style='color: #1565c0;'>Certificates in PDF</h4>");
+		html.append("<table style='width: 100%; border-collapse: collapse; margin: 10px 0; color: #000000;'>");
+		html.append("<tr style='background-color: #343a40; color: white;'>");
+		html.append("<th style='padding: 8px;'>Certificate ID</th>");
+		html.append("<th style='padding: 8px;'>Found in PDF</th>");
+		if (locationTotals != null && !locationTotals.isEmpty()) {
+			html.append("<th style='padding: 8px;'>Expected Total</th>");
+			html.append("<th style='padding: 8px;'>Total Match</th>");
+		}
+		html.append("</tr>");
+
+		for (String certId : cancelledCertificates) {
+			boolean foundInPdf = result.certificateInPdfMap.getOrDefault(certId, false);
+			String bgColor = foundInPdf ? "#e8f5e9" : "#fff3e0";
+
+			html.append("<tr style='background-color: ").append(bgColor).append("; color: #000000;'>");
+			html.append("<td style='padding: 8px; font-weight: bold;'>").append(certId).append("</td>");
+			html.append("<td style='padding: 8px; text-align: center;'>").append(foundInPdf ? "Yes" : "No").append("</td>");
+
+			if (locationTotals != null && !locationTotals.isEmpty()) {
+				Double expectedTotal = locationTotals.get(certId);
+				Boolean matches = result.locationTotalMatches.get(certId);
+
+				html.append("<td style='padding: 8px; text-align: center;'>$").append(expectedTotal != null ? String.format("%.2f", expectedTotal) : "N/A").append("</td>");
+				html.append("<td style='padding: 8px; text-align: center;'>").append(matches != null && matches ? getStatusBadge("PASS") : getStatusBadge("WARN")).append("</td>");
+			}
+			html.append("</tr>");
+		}
+		html.append("</table>");
+
+		// Location Details from PDF
+		if (result.pdfLocations != null && !result.pdfLocations.isEmpty()) {
+			html.append("<h4 style='color: #1565c0;'>Location Details from PDF</h4>");
+			html.append("<table style='width: 100%; border-collapse: collapse; margin: 10px 0; color: #000000; font-size: 12px;'>");
+			html.append("<tr style='background-color: #343a40; color: white;'>");
+			html.append("<th style='padding: 6px;'>Cert ID</th>");
+			html.append("<th style='padding: 6px;'>Address</th>");
+			html.append("<th style='padding: 6px;'>Property</th>");
+			html.append("<th style='padding: 6px;'>GL</th>");
+			html.append("<th style='padding: 6px;'>Water/Sewer</th>");
+			html.append("<th style='padding: 6px;'>Taxes</th>");
+			html.append("<th style='padding: 6px;'>Fees</th>");
+			html.append("<th style='padding: 6px;'>Total</th>");
+			html.append("</tr>");
+
+			for (com.automation.utils.FlatCancelPDFReader.FlatCancelLocation loc : result.pdfLocations) {
+				html.append("<tr style='background-color: #ffffff; border-bottom: 1px solid #dee2e6; color: #000000;'>");
+				html.append("<td style='padding: 6px; font-weight: bold;'>").append(loc.certId).append("</td>");
+				html.append("<td style='padding: 6px;'>").append(loc.propertyAddress != null ? loc.propertyAddress : "").append("</td>");
+				html.append("<td style='padding: 6px; text-align: right;'>$").append(String.format("%.2f", loc.propertyPremium)).append("</td>");
+				html.append("<td style='padding: 6px; text-align: right;'>$").append(String.format("%.2f", loc.glPremium)).append("</td>");
+				html.append("<td style='padding: 6px; text-align: right;'>$").append(String.format("%.2f", loc.waterSewerPremium)).append("</td>");
+				html.append("<td style='padding: 6px; text-align: right;'>$").append(String.format("%.2f", loc.taxes)).append("</td>");
+				html.append("<td style='padding: 6px; text-align: right;'>$").append(String.format("%.2f", loc.fees)).append("</td>");
+				html.append("<td style='padding: 6px; text-align: right; font-weight: bold;'>$").append(String.format("%.2f", loc.total)).append("</td>");
+				html.append("</tr>");
+			}
+			html.append("</table>");
+		}
+
+		// Errors
+		if (!result.errors.isEmpty()) {
+			html.append("<div style='margin-top: 10px; padding: 10px; background-color: #ffebee; border-radius: 4px;'>");
+			html.append("<strong style='color: #c62828;'>Errors:</strong><ul style='margin: 5px 0; padding-left: 20px;'>");
+			for (String error : result.errors) {
+				html.append("<li style='color: #c62828;'>").append(error).append("</li>");
+			}
+			html.append("</ul></div>");
+		}
+
+		html.append("</div>");
+
+		return html.toString();
+	}
+
+	// ==================== Flat Cancel Result Classes ====================
+
+	/**
+	 * Result class for Flat Cancel Certificate validation (not displayed on Master Policy)
+	 */
+	public static class FlatCancelCertificateValidationResult {
+		public int totalCertificates;
+		public java.util.List<String> certificatesNotFound = new java.util.ArrayList<>();
+		public java.util.List<String> certificatesStillDisplayed = new java.util.ArrayList<>();
+		public boolean allCertificatesRemoved;
+		public String htmlReport;
+
+		public boolean isValid() {
+			return allCertificatesRemoved;
+		}
+	}
+
+	/**
+	 * Result class for Flat Cancel PDF validation
+	 */
+	public static class FlatCancelPDFValidationResult {
+		public String pdfPath;
+		public double expectedGrandTotal;
+		public double pdfGrandTotal;
+		public double difference;
+		public boolean grandTotalMatch;
+
+		public com.automation.utils.FlatCancelPDFReader.FlatCancelSummary pdfSummary;
+		public java.util.List<com.automation.utils.FlatCancelPDFReader.FlatCancelLocation> pdfLocations;
+
+		public java.util.List<String> certificatesFoundInPdf = new java.util.ArrayList<>();
+		public java.util.List<String> certificatesNotInPdf = new java.util.ArrayList<>();
+		public java.util.Map<String, Boolean> certificateInPdfMap = new java.util.HashMap<>();
+		public java.util.Map<String, Boolean> locationTotalMatches = new java.util.HashMap<>();
+
+		public java.util.List<String> errors = new java.util.ArrayList<>();
+		public String htmlReport;
+
+		public boolean isValid() {
+			return grandTotalMatch && errors.isEmpty();
+		}
+
+		public void addError(String error) {
+			errors.add(error);
+		}
+	}
+
 	// ==================== Result Classes ====================
 
 	/**

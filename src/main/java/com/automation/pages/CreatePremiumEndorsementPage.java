@@ -844,7 +844,7 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 		html.append("</tr>");
 
 		html.append("</table>");
-		html.append("<p style='color: #000000; font-size: 12px; margin-top: 10px;'>");
+		html.append("<p style='color: #000000; font-size: 12px; font-weight: bold; margin-top: 10px;'>");
 		html.append("Validation: After selecting a date 6 months from today in the date picker, ");
 		html.append("the same value should be displayed in the Endorsement Effective Date textbox.</p>");
 		html.append("</div>");
@@ -4248,8 +4248,10 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 
 		// Normalize target address for comparison
 		String normalizedTarget = normalizeAddress(targetAddress);
-		logger.info("Searching for normalized address: '{}'", normalizedTarget);
+		String streetTarget = extractStreetPortion(targetAddress);
+		logger.info("Searching for normalized address: '{}', street portion: '{}'", normalizedTarget, streetTarget);
 
+		// First pass: Try exact/full address matching
 		for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
 			WebElement row = rows.get(rowIdx);
 			try {
@@ -4285,7 +4287,45 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			}
 		}
 
-		logger.warn("No row found matching address: '{}'", targetAddress);
+		// Second pass: Try lenient street-portion matching (handles Faker city/state/zip differences)
+		if (streetTarget != null && streetTarget.length() > 5) {
+			logger.info("Full address match failed, trying street-portion matching: '{}'", streetTarget);
+			for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
+				WebElement row = rows.get(rowIdx);
+				try {
+					List<WebElement> cells = row.findElements(By.tagName("td"));
+
+					// Try address column first
+					if (addressColIndex >= 0 && addressColIndex < cells.size()) {
+						String cellAddress = cells.get(addressColIndex).getText().trim();
+						String cellStreet = extractStreetPortion(cellAddress);
+
+						if (cellStreet.contains(streetTarget) || streetTarget.contains(cellStreet)) {
+							logger.info("Row {}: Street-portion match found - '{}' matches '{}' (street: '{}')",
+								rowIdx, cellAddress, targetAddress, streetTarget);
+							return row;
+						}
+					}
+
+					// Fallback: search all cells
+					for (int c = 0; c < cells.size(); c++) {
+						String cellText = cells.get(c).getText().trim();
+						if (cellText.length() > 10 && !cellText.startsWith("$")) {
+							String cellStreet = extractStreetPortion(cellText);
+							if (cellStreet.contains(streetTarget) || streetTarget.contains(cellStreet)) {
+								logger.info("Row {}: Street-portion match found in cell {} - '{}' matches '{}' (street: '{}')",
+									rowIdx, c, cellText, targetAddress, streetTarget);
+								return row;
+							}
+						}
+					}
+				} catch (Exception e) {
+					logger.warn("Error checking row {} for street match: {}", rowIdx, e.getMessage());
+				}
+			}
+		}
+
+		logger.warn("No row found matching address: '{}' (tried full and street-portion matching)", targetAddress);
 		return null;
 	}
 
@@ -4304,6 +4344,38 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 			.replaceAll("lane", "ln")
 			.replaceAll("[,.]", "")
 			.trim();
+	}
+
+	/**
+	 * Extract just the street portion from an address (street number + street name)
+	 * This allows matching addresses even when city/state/zip differ
+	 * Example: "56-45 Main St, Flushing, NY 11355" -> "56-45 main st"
+	 */
+	private String extractStreetPortion(String address) {
+		if (address == null || address.isEmpty()) return "";
+
+		String normalized = normalizeAddress(address);
+
+		// Split by common delimiters (comma, state abbreviation patterns)
+		// Take the first part which is typically the street address
+		String[] parts = normalized.split(",");
+		if (parts.length > 0) {
+			String streetPart = parts[0].trim();
+			// Further clean - remove any trailing city name if present
+			// Pattern: street ends with st/ave/dr/rd/blvd/ln etc.
+			if (streetPart.matches(".*\\b(st|ave|dr|rd|blvd|ln|court|ct|way|circle|cir|place|pl)\\b.*")) {
+				// Extract up to and including the street type
+				java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+					"^(.+?\\b(?:st|ave|dr|rd|blvd|ln|court|ct|way|circle|cir|place|pl)\\b)"
+				);
+				java.util.regex.Matcher matcher = pattern.matcher(streetPart);
+				if (matcher.find()) {
+					return matcher.group(1).trim();
+				}
+			}
+			return streetPart;
+		}
+		return normalized;
 	}
 
 	/**
