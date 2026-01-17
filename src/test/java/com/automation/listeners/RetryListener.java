@@ -1,6 +1,5 @@
 package com.automation.listeners;
 
-import com.automation.utils.ConfigReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.testng.IAnnotationTransformer;
@@ -12,8 +11,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
 /**
- * Retry Listener - Implements retry logic for failed tests
- * Automatically retries failed tests based on configuration
+ * Retry Listener - DISABLED
+ * Retry functionality has been completely disabled to prevent duplicate test execution.
+ * Tests will run exactly once, regardless of pass/fail status.
  */
 public class RetryListener implements IAnnotationTransformer {
 
@@ -22,39 +22,19 @@ public class RetryListener implements IAnnotationTransformer {
     @Override
     public void transform(ITestAnnotation annotation, Class testClass,
                           Constructor testConstructor, Method testMethod) {
-        annotation.setRetryAnalyzer(RetryAnalyzer.class);
+        // DISABLED: Do not set retry analyzer - tests should run only once
+        // annotation.setRetryAnalyzer(RetryAnalyzer.class);
     }
 
     /**
-     * Retry Analyzer - Determines if a test should be retried
+     * Retry Analyzer - DISABLED
+     * Always returns false to prevent any retry behavior
      */
     public static class RetryAnalyzer implements IRetryAnalyzer {
 
-        private int retryCount = 0;
-        private static final int MAX_RETRY_COUNT;
-        private static final boolean RETRY_ENABLED;
-
-        static {
-            ConfigReader config = ConfigReader.getInstance();
-            MAX_RETRY_COUNT = config.getIntProperty("retry.count", 2);
-            RETRY_ENABLED = config.getBooleanProperty("retry.enabled", true);
-        }
-
         @Override
         public boolean retry(ITestResult result) {
-            if (!RETRY_ENABLED) {
-                return false;
-            }
-
-            if (retryCount < MAX_RETRY_COUNT) {
-                retryCount++;
-                logger.warn("Retrying test '{}' - Attempt {} of {}",
-                    result.getName(), retryCount, MAX_RETRY_COUNT);
-                return true;
-            }
-
-            logger.error("Test '{}' failed after {} retry attempts",
-                result.getName(), MAX_RETRY_COUNT);
+            // DISABLED: Never retry - always return false
             return false;
         }
     }

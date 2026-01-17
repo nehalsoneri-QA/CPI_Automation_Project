@@ -213,6 +213,10 @@
                         <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
                     </suiteXmlFiles>
                     <testFailureIgnore>false</testFailureIgnore>
+                    <!-- Prevent duplicate/retry execution -->
+                    <rerunFailingTestsCount>0</rerunFailingTestsCount>
+                    <skipAfterFailureCount>0</skipAfterFailureCount>
+                    <runOrder>alphabetical</runOrder>
                     <systemPropertyVariables>
                         <browser>chrome</browser>
                         <environment>dev</environment>
@@ -220,54 +224,11 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven Failsafe Plugin for Integration Tests -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.5.1</version>
-            </plugin>
+            <!-- Failsafe Plugin DISABLED - removed to prevent duplicate test execution -->
         </plugins>
     </build>
 
     <profiles>
-        <!-- Profile for running Cucumber tests -->
-        <profile>
-            <id>cucumber</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.5.1</version>
-                        <configuration>
-                            <includes>
-                                <include>**/CucumberTestRunner.java</include>
-                            </includes>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-
-        <!-- Profile for running TestNG tests -->
-        <profile>
-            <id>testng</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.5.1</version>
-                        <configuration>
-                            <suiteXmlFiles>
-                                <suiteXmlFile>testng.xml</suiteXmlFile>
-                            </suiteXmlFiles>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-
         <!-- Profile for AI-enabled tests with Healenium -->
         <profile>
             <id>ai-healing</id>
