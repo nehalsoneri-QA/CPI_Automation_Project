@@ -688,37 +688,74 @@ public class CreatePremiumEndorsementPage extends CreatePremiumEndorsementLocato
 	 */
 	private String getEndorsementEffectiveDateValue() {
 		try {
-			WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+			logger.info("=== Getting Endorsement Effective Date Value ===");
 
-			// Try multiple approaches to get the date value
+			// Primary approach: Get date from react-date-picker hidden input (first input has full ISO date)
+			try {
+				WebElement dateContainer = driver.findElement(By.xpath("//*[@id='create-endorsement-endorsement-effective-date-picker']/div/div"));
+				if (dateContainer != null) {
+					java.util.List<WebElement> inputs = dateContainer.findElements(By.xpath(".//input"));
+					logger.info("Found {} inputs in date picker container", inputs.size());
+					if (inputs.size() > 0) {
+						// The first input in react-date-picker contains the full ISO date (YYYY-MM-DD)
+						String firstInputValue = inputs.get(0).getAttribute("value");
+						logger.info("First input value: '{}'", firstInputValue);
+
+						// Check if it's an ISO date format (YYYY-MM-DD)
+						if (firstInputValue != null && firstInputValue.matches("\\d{4}-\\d{2}-\\d{2}")) {
+							// Convert ISO to MM/dd/yyyy for comparison
+							java.time.LocalDate date = java.time.LocalDate.parse(firstInputValue);
+							String formattedDate = date.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+							logger.info("Got date in ISO format, converted to: {}", formattedDate);
+							return formattedDate;
+						}
+					}
+				}
+			} catch (Exception e) {
+				logger.debug("Primary approach failed: {}", e.getMessage());
+			}
+
+			// Alternative: Try JavaScript to get the hidden input value directly
+			try {
+				String jsDate = (String) ((JavascriptExecutor) driver).executeScript(
+					"var picker = document.getElementById('create-endorsement-endorsement-effective-date-picker');" +
+					"if (picker) {" +
+					"  var inputs = picker.querySelectorAll('input');" +
+					"  for (var i = 0; i < inputs.length; i++) {" +
+					"    var val = inputs[i].value;" +
+					"    if (val && val.match(/\\d{4}-\\d{2}-\\d{2}/)) return val;" +
+					"  }" +
+					"}" +
+					"return null;");
+				if (jsDate != null && !jsDate.isEmpty()) {
+					java.time.LocalDate date = java.time.LocalDate.parse(jsDate);
+					String formattedDate = date.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+					logger.info("Got date via JavaScript, converted to: {}", formattedDate);
+					return formattedDate;
+				}
+			} catch (Exception e) {
+				logger.debug("JavaScript approach failed: {}", e.getMessage());
+			}
+
+			// Try multiple approaches to get the date value from visible inputs
 			String[] inputXpaths = {
 				"//*[@id='create-endorsement-endorsement-effective-date-picker']//input",
 				"//*[@id='create-endorsement-endorsement-effective-date-picker']/div/input",
-				"//div[contains(@id,'endorsement-effective-date')]//input",
-				"//*[@id='create-endorsement-endorsement-effective-date-picker']//input[@type='text']"
+				"//div[contains(@id,'endorsement-effective-date')]//input"
 			};
 
 			for (String xpath : inputXpaths) {
 				try {
-					WebElement input = driver.findElement(By.xpath(xpath));
-					if (input.isDisplayed()) {
-						// Try getting value attribute first
+					java.util.List<WebElement> inputs = driver.findElements(By.xpath(xpath));
+					for (WebElement input : inputs) {
 						String value = input.getAttribute("value");
 						if (value != null && !value.isEmpty()) {
-							logger.info("Got date value from input 'value' attribute: {}", value);
-							return value.trim();
-						}
-						// Try getting text
-						String text = input.getText();
-						if (text != null && !text.isEmpty()) {
-							logger.info("Got date value from input text: {}", text);
-							return text.trim();
-						}
-						// Try JavaScript to get value
-						value = (String) ((JavascriptExecutor) driver).executeScript(
-							"return arguments[0].value;", input);
-						if (value != null && !value.isEmpty()) {
-							logger.info("Got date value via JavaScript: {}", value);
+							logger.info("Got date value from input: {}", value);
+							// Check if ISO format and convert
+							if (value.matches("\\d{4}-\\d{2}-\\d{2}")) {
+								java.time.LocalDate date = java.time.LocalDate.parse(value);
+								return date.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+							}
 							return value.trim();
 						}
 					}
