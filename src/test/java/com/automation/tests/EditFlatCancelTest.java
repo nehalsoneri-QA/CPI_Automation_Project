@@ -58,7 +58,9 @@ public class EditFlatCancelTest {
 
     // Store calculated totals for PDF validation
     private List<String> allCancelledCertificates;      // Combined list of all cancelled certificates
-    private double calculatedGrandTotal;                // Total of all cancelled certificates
+    private double calculatedGrandTotal;                // Total of all cancelled certificates (Create + Edit)
+    private double createFlatCancelTotal;               // Total from Create Flat Cancel screen
+    private double editFlatCancelTotal;                 // Total from Edit Flat Cancel screen
     private Map<String, Double> locationTotals;         // Map of cert ID to its total
 
     // ==================== Setup and Teardown ====================
@@ -328,6 +330,17 @@ public class EditFlatCancelTest {
         String createLocationReport = flatCancelPage.generateLocationDetailsReport(createLocationDetails);
         flatCancelPage.logHtmlToReport(createLocationReport);
 
+        // Calculate and store Create Flat Cancel total for PDF validation
+        createFlatCancelTotal = 0;
+        for (FlatCancelPage.LocationDetails loc : createLocationDetails) {
+            createFlatCancelTotal += loc.totalSum;
+            // Store individual location total for PDF validation
+            locationTotals.put(loc.certNo, loc.totalSum);
+            logger.info("Create Flat Cancel - Certificate: {} | Total: ${}", loc.certNo, String.format("%.2f", loc.totalSum));
+        }
+        flatCancelPage.logInfoToReport("<strong>Create Flat Cancel Total: $" + String.format("%.2f", createFlatCancelTotal) + "</strong>");
+        logger.info("Create Flat Cancel Total: ${}", String.format("%.2f", createFlatCancelTotal));
+
         // Step 8: Click Create Endorsement
         assertThat(flatCancelPage.clickCreateEndorsementButton())
                 .as("Should be able to click Create Endorsement button")
@@ -357,23 +370,53 @@ public class EditFlatCancelTest {
                 .as("Should be on Edit Cancel Address page")
                 .isTrue();
 
+        // Log current URL for debugging
+        String currentUrl = driver.getCurrentUrl();
+        logger.info("Current URL: {}", currentUrl);
+        editFlatCancelPage.logInfoToReport("Current URL: " + currentUrl);
+
         editFlatCancelPage.captureScreenshotToReport("Edit Cancel Address - Before Selecting Additional Certificates");
+
+        // DEBUG: First get all certificates VISIBLE on the Edit Cancel Address page
+        List<String> certificatesOnPage = editFlatCancelPage.getAllCertificatesFromTable();
+        logger.info("=== CERTIFICATES VISIBLE ON EDIT CANCEL ADDRESS PAGE ===");
+        logger.info("Found {} certificates on page: {}", certificatesOnPage.size(), certificatesOnPage);
+        editFlatCancelPage.logInfoToReport("<strong>Certificates visible on Edit Cancel Address page:</strong> " + certificatesOnPage);
 
         // Get certificates from EditFlatCancel sheet
         editFlatCancelCertificates = editFlatCancelPage.getEditCertificatesForPolicy(currentPolicyId);
 
+        logger.info("=== CERTIFICATES FROM EDITFLATCANCEL SHEET ===");
         logger.info("Found {} certificates in EditFlatCancel sheet for policy {}: {}",
                 editFlatCancelCertificates.size(), currentPolicyId, editFlatCancelCertificates);
 
         editFlatCancelPage.logInfoToReport("Policy: " + currentPolicyId + " | EditFlatCancel Certificates: " + editFlatCancelCertificates.size());
-        editFlatCancelPage.logInfoToReport("Certificates to select: " + editFlatCancelCertificates);
+        editFlatCancelPage.logInfoToReport("<strong>Certificates to select from sheet:</strong> " + editFlatCancelCertificates);
+
+        // DEBUG: Check which certificates from sheet are available on page
+        List<String> matchingCerts = new ArrayList<>();
+        List<String> missingCerts = new ArrayList<>();
+        for (String certFromSheet : editFlatCancelCertificates) {
+            if (certificatesOnPage.contains(certFromSheet)) {
+                matchingCerts.add(certFromSheet);
+            } else {
+                missingCerts.add(certFromSheet);
+            }
+        }
+        logger.info("=== COMPARISON ===");
+        logger.info("Matching certificates: {}", matchingCerts);
+        logger.info("Missing certificates (in sheet but not on page): {}", missingCerts);
+        editFlatCancelPage.logInfoToReport("<span style='color:green'>Matching:</span> " + matchingCerts);
+        if (!missingCerts.isEmpty()) {
+            editFlatCancelPage.logInfoToReport("<span style='color:red'>Missing (in sheet but NOT on page):</span> " + missingCerts);
+        }
 
         // Assert that certificates are found in EditFlatCancel sheet
         assertThat(editFlatCancelCertificates)
                 .as("EditFlatCancel sheet should have certificates for policy: " + currentPolicyId)
                 .isNotEmpty();
 
-        // Select additional certificates
+        // Select certificates from EditFlatCancel sheet
         List<EditFlatCancelPage.CertificateSelectionResult> selectionResults =
                 editFlatCancelPage.selectAllCertificates(editFlatCancelCertificates);
 
@@ -428,32 +471,40 @@ public class EditFlatCancelTest {
 
         editFlatCancelPage.captureScreenshotToReport("Edit Cancel Address - Location Details Extracted");
 
-        // Calculate totals and store for PDF validation
-        double totalSum = 0;
+        // Calculate Edit Flat Cancel totals and store for PDF validation
+        editFlatCancelTotal = 0;
         for (EditFlatCancelPage.LocationDetails loc : editLocationDetails) {
-            totalSum += loc.totalSum;
+            editFlatCancelTotal += loc.totalSum;
             // Store individual location total for PDF validation
             locationTotals.put(loc.certNo, loc.totalSum);
-            logger.info("Certificate: {} | Total: ${}", loc.certNo, String.format("%.2f", loc.totalSum));
+            logger.info("Edit Flat Cancel - Certificate: {} | Total: ${}", loc.certNo, String.format("%.2f", loc.totalSum));
         }
 
-        editFlatCancelPage.logInfoToReport("<strong>EditFlatCancel Grand Total: $" + String.format("%.2f", totalSum) + "</strong>");
-        logger.info("EditFlatCancel Grand Total: ${}", String.format("%.2f", totalSum));
+        editFlatCancelPage.logInfoToReport("<strong>Edit Flat Cancel Total: $" + String.format("%.2f", editFlatCancelTotal) + "</strong>");
+        logger.info("Edit Flat Cancel Total: ${}", String.format("%.2f", editFlatCancelTotal));
 
-        // Store the calculated grand total for PDF validation
-        calculatedGrandTotal = totalSum;
+        // Calculate GRAND TOTAL = Create Flat Cancel + Edit Flat Cancel
+        // This should match "Total Premium of Cancelled Property" in PDF
+        calculatedGrandTotal = createFlatCancelTotal + editFlatCancelTotal;
 
         // Combine all cancelled certificates for validation
         allCancelledCertificates.clear();
         allCancelledCertificates.addAll(createFlatCancelCertificates);
         allCancelledCertificates.addAll(editFlatCancelCertificates);
 
-        editFlatCancelPage.logInfoToReport("<p><strong>Calculated Grand Total (for PDF validation): $" +
+        editFlatCancelPage.logInfoToReport("<hr>");
+        editFlatCancelPage.logInfoToReport("<h4>PDF Validation Summary</h4>");
+        editFlatCancelPage.logInfoToReport("<p>Create Flat Cancel Total: $" + String.format("%.2f", createFlatCancelTotal) + "</p>");
+        editFlatCancelPage.logInfoToReport("<p>Edit Flat Cancel Total: $" + String.format("%.2f", editFlatCancelTotal) + "</p>");
+        editFlatCancelPage.logInfoToReport("<p><strong>GRAND TOTAL (Create + Edit) for PDF validation: $" +
                 String.format("%.2f", calculatedGrandTotal) + "</strong></p>");
-        editFlatCancelPage.logInfoToReport("<p>All Cancelled Certificates: " + allCancelledCertificates + "</p>");
+        editFlatCancelPage.logInfoToReport("<p>All Cancelled Certificates (" + allCancelledCertificates.size() + "): " + allCancelledCertificates + "</p>");
 
-        logger.info("Stored calculated grand total: ${} for PDF validation", String.format("%.2f", calculatedGrandTotal));
-        logger.info("All cancelled certificates: {}", allCancelledCertificates);
+        logger.info("=== PDF VALIDATION TOTALS ===");
+        logger.info("Create Flat Cancel Total: ${}", String.format("%.2f", createFlatCancelTotal));
+        logger.info("Edit Flat Cancel Total: ${}", String.format("%.2f", editFlatCancelTotal));
+        logger.info("GRAND TOTAL (Create + Edit): ${}", String.format("%.2f", calculatedGrandTotal));
+        logger.info("All cancelled certificates ({}): {}", allCancelledCertificates.size(), allCancelledCertificates);
 
         logger.info("Test PASSED: EditFlatCancel certificate details extracted");
     }

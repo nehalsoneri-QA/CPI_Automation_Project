@@ -293,10 +293,41 @@ public class EditFlatCancelPage extends EditFlatCancelLocators {
 
         try {
             waitForLocationsTable();
-            List<WebElement> rows = driver.findElements(tableRowsLocator);
+            waitForLoaderToDisappear();
+            sleep(2000); // Wait for table to fully load
 
-            for (WebElement row : rows) {
+            // Debug: Find all tables on page
+            List<WebElement> allTables = driver.findElements(By.xpath("//table"));
+            logger.info("DEBUG: Found {} tables on page", allTables.size());
+
+            // Debug: Log each table's first row
+            for (int t = 0; t < allTables.size(); t++) {
+                try {
+                    List<WebElement> tableRows = allTables.get(t).findElements(By.xpath(".//tbody//tr"));
+                    logger.info("DEBUG: Table {} has {} rows", t, tableRows.size());
+                    if (!tableRows.isEmpty()) {
+                        String firstRowText = tableRows.get(0).getText().replace("\n", " | ").substring(0, Math.min(150, tableRows.get(0).getText().length()));
+                        logger.info("DEBUG: Table {} first row: {}", t, firstRowText);
+                    }
+                } catch (Exception e) {
+                    logger.debug("DEBUG: Could not read table {}: {}", t, e.getMessage());
+                }
+            }
+
+            // Get all rows from all tables
+            List<WebElement> rows = driver.findElements(tableRowsLocator);
+            logger.info("DEBUG: Total rows from tableRowsLocator: {}", rows.size());
+
+            for (int i = 0; i < rows.size(); i++) {
+                WebElement row = rows.get(i);
                 String rowText = row.getText();
+                String rowTextClean = rowText.replace("\n", " | ");
+
+                // Log first 10 rows for debugging
+                if (i < 10) {
+                    logger.info("DEBUG: Row {}: {}", i, rowTextClean.substring(0, Math.min(200, rowTextClean.length())));
+                }
+
                 // Certificate IDs typically start with letters followed by numbers
                 if (rowText.contains("ARCH") || rowText.contains("CERT")) {
                     // Extract the certificate ID from the row
@@ -305,6 +336,7 @@ public class EditFlatCancelPage extends EditFlatCancelLocators {
                         if (part.startsWith("ARCH") || part.startsWith("CERT")) {
                             if (!certificates.contains(part)) {
                                 certificates.add(part);
+                                logger.debug("DEBUG: Extracted certificate: {}", part);
                             }
                             break;
                         }
@@ -314,7 +346,7 @@ public class EditFlatCancelPage extends EditFlatCancelLocators {
 
             logger.info("Found {} certificates in table: {}", certificates.size(), certificates);
         } catch (Exception e) {
-            logger.error("Error getting certificates from table: {}", e.getMessage());
+            logger.error("Error getting certificates from table: {}", e.getMessage(), e);
         }
 
         return certificates;
@@ -523,21 +555,8 @@ public class EditFlatCancelPage extends EditFlatCancelLocators {
         CertificateSelectionResult result = new CertificateSelectionResult(certificateId);
 
         try {
-            waitForLocationsTable();
             waitForLoaderToDisappear();
-            sleep(1000);
-
-            // Debug: Log all tables on page
-            List<WebElement> allTables = driver.findElements(By.xpath("//table"));
-            logger.info("Found {} tables on page", allTables.size());
-
-            // Debug: Log all rows in all tables
-            List<WebElement> allRows = driver.findElements(By.xpath("//table//tbody//tr"));
-            logger.info("Found {} total rows in all tables", allRows.size());
-            for (int i = 0; i < Math.min(allRows.size(), 10); i++) {
-                String rowText = allRows.get(i).getText().substring(0, Math.min(100, allRows.get(i).getText().length()));
-                logger.info("Row {}: {}", i, rowText);
-            }
+            sleep(300); // Reduced wait time
 
             // Try multiple XPath patterns to find the certificate
             String[] xpathPatterns = {
